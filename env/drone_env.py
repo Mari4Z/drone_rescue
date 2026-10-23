@@ -57,7 +57,10 @@ class DroneEnv:
         self.steps += 1
 
         out = not (0 <= x < NX and 0 <= y < NY and 0 <= z < NZ)
-        if out or self.obstacles[x, y, z]:
+        # El suelo (z=0) solo es transitable en A y B: hay que despegar en vertical
+        # desde A y aterrizar en vertical sobre B.
+        on_ground = not out and z == 0 and (x, y) not in (START[:2], GOAL[:2])
+        if out or on_ground or self.obstacles[x, y, z]:
             return self.pos, R_CRASH, True, {"result": "crash"}
 
         shaping = R_STEP + R_PROGRESS * (dist_to_goal(self.pos) - dist_to_goal((x, y, z)))
