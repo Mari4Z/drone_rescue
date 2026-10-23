@@ -20,6 +20,7 @@ COLUMNS = [
 ACTIONS = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
 
 R_GOAL, R_CRASH = 100.0, -100.0
+R_STEP = -1.0  # penalización por cada paso
 R_PROGRESS = 1.0  # bonus por celda que se acerca a B (distancia Manhattan); 0 lo desactiva
 
 
@@ -59,7 +60,7 @@ class DroneEnv:
         if out or self.obstacles[x, y, z]:
             return self.pos, R_CRASH, True, {"result": "crash"}
 
-        shaping = R_PROGRESS * (dist_to_goal(self.pos) - dist_to_goal((x, y, z)))
+        shaping = R_STEP + R_PROGRESS * (dist_to_goal(self.pos) - dist_to_goal((x, y, z)))
         self.pos = (x, y, z)
         if self.pos == GOAL:
             return self.pos, R_GOAL, True, {"result": "goal"}

@@ -2,6 +2,7 @@ from collections import Counter
 
 from agent.qlearning import QAgent
 from env.drone_env import DroneEnv, GOAL
+from visualize import show
 
 
 def train(episodes=20000, seed=0):
@@ -39,3 +40,4 @@ if __name__ == "__main__":
     path, result = greedy_path(env, agent)
     print(f"ruta greedy: {result}, {len(path) - 1} pasos, termina en {path[-1]} (meta {GOAL})")
     print("altura máx. de la ruta:", max(p[2] for p in path) * 5, "m")
+    show(env, path)
