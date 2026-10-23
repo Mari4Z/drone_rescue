@@ -3,7 +3,7 @@ import numpy as np
 
 class QAgent:
     def __init__(self, shape, n_actions, alpha=0.2, gamma=0.99, eps=1.0, eps_min=0.05, eps_decay=0.999, seed=0):
-        self.q = np.zeros((*shape, n_actions))
+        self.q = np.zeros((*map(int, shape), n_actions))
         self.alpha, self.gamma = alpha, gamma
         self.eps, self.eps_min, self.eps_decay = eps, eps_min, eps_decay
         self.rng = np.random.default_rng(seed)
