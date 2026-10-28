@@ -11,7 +11,28 @@
   button { background: #1e293b; color: #e6edf3; border: 1px solid #334155; border-radius: 6px; padding: 4px 10px; cursor: pointer; margin-right: 4px; }
   button:hover { background: #334155; }
   .a { color: #4ade80; } .b { color: #f87171; }
+  #error { display: none; position: absolute; inset: 0; margin: auto; width: min(560px, 90vw); height: fit-content; background: #3f1d1d; border: 1px solid #f87171; border-radius: 8px; padding: 16px 20px; line-height: 1.5; }
+  #error code { background: #0f1720; padding: 2px 6px; border-radius: 4px; }
 </style>
+<script>
+  // Si algo falla (sin datos, sin internet para cargar three.js, sin WebGL) se muestra en vez de una pantalla negra
+  function showError(html) {
+    const el = document.getElementById("error");
+    el.innerHTML = html;
+    el.style.display = "block";
+  }
+  addEventListener("error", (e) => {
+    if (document.getElementById("error").style.display === "block") return;
+    const src = e.target && e.target.src;
+    showError(src
+      ? `No se pudo cargar <code>${src}</code>. ¿Hay conexión a internet?`
+      : `Error: ${e.message}`);
+  }, true);
+  setTimeout(() => {
+    if (!window.__droneReady && document.getElementById("error").style.display !== "block")
+      showError("three.js no terminó de cargar. Revisa la conexión a internet o abre el archivo en Chrome, Firefox o Safari reciente.");
+  }, 8000);
+</script>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -29,11 +50,23 @@
     <label>velocidad <input id="speed" type="range" min="1" max="20" value="6"></label>
   </div>
 </div>
+<div id="error"></div>
 <script type="module">
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const DATA = /*DATA*/null;
+window.__droneReady = true;
+if (!DATA) {
+  showError(`Esta es la <b>plantilla</b>, no tiene datos. Genera la vista con:<br><br>
+    <code>.venv/bin/python cli.py run --model models/dummy.npy --web</code><br><br>
+    y abre <code>drone_view.html</code> (en la raíz del proyecto).`);
+  throw new Error("sin datos");
+}
+if (!document.createElement("canvas").getContext("webgl2")) {
+  showError("Este navegador no tiene WebGL activado; three.js lo necesita.");
+  throw new Error("sin WebGL");
+}
 const { cell, size, start, goal, columns, path, result, env } = DATA;
 const [NX, NY, NZ] = size;
 const W = NX * cell, D = NY * cell, H = NZ * cell;
