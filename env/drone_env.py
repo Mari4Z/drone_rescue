@@ -30,9 +30,9 @@ def dist_to_goal(p):
     return sum(abs(a - b) for a, b in zip(p, GOAL))
 
 
-def build_obstacles():
+def build_obstacles(columns=COLUMNS):
     grid = np.zeros((NX, NY, NZ), dtype=bool)
-    for x0, x1, y0, y1, h in COLUMNS:
+    for x0, x1, y0, y1, h in columns:
         grid[x0:x1 + 1, y0:y1 + 1, : h // CELL] = True  # 55 m -> 11 celdas (z=0..10)
     return grid
 
@@ -40,10 +40,11 @@ def build_obstacles():
 class DroneEnv(gym.Env):
     metadata = {"render_modes": []}
 
-    def __init__(self, max_steps=400):
+    def __init__(self, max_steps=400, columns=COLUMNS):
         self.action_space = spaces.Discrete(len(ACTIONS))
         self.observation_space = spaces.MultiDiscrete([NX, NY, NZ])
-        self.obstacles = build_obstacles()
+        self.columns = columns
+        self.obstacles = build_obstacles(columns)
         self.max_steps = max_steps
         self.pos = START
         self.steps = 0
@@ -77,3 +78,8 @@ class DroneEnv(gym.Env):
         if self.steps >= self.max_steps:
             return self._obs(), reward, False, True, {"result": "timeout"}
         return self._obs(), reward, False, False, {"result": "flying"}
+
+
+# V1 "dummy": mismo mapa, A, B y reglas, pero con una sola columna en el centro.
+# Sirve como entorno base para validar el pipeline antes de usar las 5 columnas.
+DUMMY_COLUMNS = [(8, 11, 8, 11, 55)]

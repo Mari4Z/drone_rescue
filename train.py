@@ -8,8 +8,8 @@ from env.drone_env import GOAL
 from visualize import show
 
 
-def train(episodes=20000, seed=0):
-    e = gym.make("DroneRescue-v0")
+def train(episodes=20000, seed=0, env_id="DroneRescue-v0"):
+    e = gym.make(env_id)
     agent = QAgent(e.observation_space.nvec, e.action_space.n, seed=seed)
     history = []
     for ep in range(1, episodes + 1):
