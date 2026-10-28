@@ -118,23 +118,37 @@ def cmd_eval(args):
     print(" ", fmt(m), "|", m["results"])
 
 
+def mid_flight_climbs(path):
+    """Cambios de altura fuera de la vertical de A y B (sobrevuelos)."""
+    ends = (START[:2], GOAL[:2])
+    return sum(1 for a, b in zip(path, path[1:]) if a[2] != b[2] and (b[0], b[1]) not in ends)
+
+
 def cmd_run(args):
     algo = algo_of(args.model)
     env_id = env_for(args, algo)
     _, policy = load_policy(args.model, args.device)
     e = gym.make(env_id)
-    path, result = run_episode(e, policy, seed=args.seed)
-    best = astar(e.unwrapped)
-    print(f"mapa (semilla {args.seed}): {e.unwrapped.columns}")
-    print(f"resultado: {result} | {len(path) - 1} pasos (A*: {len(best) - 1}) | "
-          f"altura máx. {max(p[2] for p in path) * CELL} m")
-    show(e.unwrapped, path)
+    random_map = getattr(e.unwrapped, "random_map", False)
+    first = args.seed if args.seed is not None else int(np.random.default_rng().integers(1_000_000))
+    seeds = [first + i for i in range(args.maps if random_map else 1)]
+    episodes = []
+    for seed in seeds:
+        path, result = run_episode(e, policy, seed=seed)
+        best = astar(e.unwrapped)
+        episodes.append({"seed": seed, "columns": e.unwrapped.columns, "path": path,
+                         "result": result, "astar": len(best) - 1})
+        print(f"semilla {seed:7d} | {len(e.unwrapped.columns):2d} columnas | {result:7s} | "
+              f"{len(path) - 1:3d} pasos (A*: {len(best) - 1}) | altura máx. {max(p[2] for p in path) * CELL} m"
+              f" | {mid_flight_climbs(path)} cambios de altura en vuelo")
+    if len(episodes) == 1:
+        show(e.unwrapped, episodes[0]["path"])
     if args.plot:
         from plot3d import draw
-        draw(path, out=args.plot_out)
+        draw(episodes[0]["path"], out=args.plot_out)
     if args.web:
         from viewer.export import export_html
-        out = Path(export_html(e.unwrapped, path, result, env_id, args.web_out)).resolve()
+        out = Path(export_html(episodes, env_id, args.web_out)).resolve()
         print("vista 3D (three.js) en", out)
         if not args.no_open:
             webbrowser.open(out.as_uri())
@@ -213,7 +227,8 @@ def main():
     sp.add_argument("--model", required=True)
     add_env(sp)
     add_device(sp)
-    sp.add_argument("--seed", type=int, default=EVAL_SEED, help="mapa a usar (entornos aleatorios)")
+    sp.add_argument("--seed", type=int, help="semilla del primer mapa (por defecto aleatoria)")
+    sp.add_argument("--maps", type=int, default=10, help="número de mapas (entornos aleatorios)")
     sp.add_argument("--plot", action="store_true", help="genera la imagen 3D (matplotlib)")
     sp.add_argument("--plot-out", default="drone_route.png")
     sp.add_argument("--web", action="store_true", help="genera la vista 3D interactiva (three.js)")

@@ -1,13 +1,19 @@
-"""Línea base: ruta legal más corta de A a B con A* (mismas reglas de choque que el entorno)."""
+"""Línea base: ruta óptima de A a B con A* (mismas reglas de choque y mismo coste que el entorno)."""
 import heapq
 
-from env.drone_env import ACTIONS, GOAL, START, dist_to_goal
+from env.drone_env import ACTIONS, GOAL, R_LOW, R_STEP, START, dist_to_goal
+
+
+def move_cost(env, q):
+    """Coste de entrar en la celda q: el paso más la penalización por volar bajo (si aplica)."""
+    low = q[2] < env.min_cruise_z and (q[0], q[1]) not in (START[:2], GOAL[:2])
+    return -R_STEP - (R_LOW if low else 0.0)
 
 
 def astar(env):
-    """Devuelve la lista de celdas de A a B, o None si no hay ruta."""
-    open_set = [(dist_to_goal(START), 0, START)]
-    came, cost = {START: None}, {START: 0}
+    """Devuelve la lista de celdas de A a B de menor coste, o None si no hay ruta."""
+    open_set = [(dist_to_goal(START), 0.0, START)]
+    came, cost = {START: None}, {START: 0.0}
     while open_set:
         _, g, p = heapq.heappop(open_set)
         if p == GOAL:
@@ -20,8 +26,10 @@ def astar(env):
             continue
         for dx, dy, dz in ACTIONS:
             q = (p[0] + dx, p[1] + dy, p[2] + dz)
-            if env.blocked(*q) or cost.get(q, 1e9) <= g + 1:
+            if env.blocked(*q):
                 continue
-            cost[q], came[q] = g + 1, p
-            heapq.heappush(open_set, (g + 1 + dist_to_goal(q), g + 1, q))
+            g2 = g + move_cost(env, q)
+            if g2 < cost.get(q, 1e9):
+                cost[q], came[q] = g2, p
+                heapq.heappush(open_set, (g2 + dist_to_goal(q) * -R_STEP, g2, q))
     return None

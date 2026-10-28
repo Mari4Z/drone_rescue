@@ -44,11 +44,14 @@
 <div id="hud">
   <div><b id="title"></b></div>
   <div><span class="a">● A</span> inicio &nbsp; <span class="b">● B</span> meta</div>
+  <div id="mapinfo"></div>
   <div id="status"></div>
   <div style="margin-top:6px">
+    <button id="prev">◀ Mapa</button><button id="next">Mapa ▶</button>
     <button id="play">⏸ Pausa</button><button id="restart">↺ Reiniciar</button>
     <label>velocidad <input id="speed" type="range" min="1" max="20" value="6"></label>
   </div>
+  <div style="margin-top:4px; opacity:.7">columnas: <span style="color:#a7f3d0">baja</span> → <span style="color:#64748b">alta</span> · ←/→ cambia de mapa</div>
 </div>
 <div id="error"></div>
 <script type="module">
@@ -67,7 +70,9 @@ if (!document.createElement("canvas").getContext("webgl2")) {
   showError("Este navegador no tiene WebGL activado; three.js lo necesita.");
   throw new Error("sin WebGL");
 }
-const { cell, size, start, goal, columns, path, result, env } = DATA;
+const { cell, size, start, goal, env } = DATA;
+// Formato antiguo (un solo intento) o nuevo (lista de mapas)
+const episodes = DATA.episodes || [{ columns: DATA.columns, path: DATA.path, result: DATA.result }];
 const [NX, NY, NZ] = size;
 const W = NX * cell, D = NY * cell, H = NZ * cell;
 
@@ -113,17 +118,22 @@ const bounds = new THREE.LineSegments(
 bounds.position.set(W / 2, H / 2, -D / 2);
 scene.add(bounds);
 
-// Columnas (obstáculos)
-const colMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: .8 });
-for (const [x0, x1, y0, y1, h] of columns) {
-  const w = (x1 - x0 + 1) * cell, d = (y1 - y0 + 1) * cell;
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), colMat);
-  m.position.set(x0 * cell + w / 2, h / 2, -(y0 * cell + d / 2));
-  m.castShadow = m.receiveShadow = true;
-  scene.add(m);
-  const e = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: 0x334155 }));
-  e.position.copy(m.position);
-  scene.add(e);
+// Columnas (obstáculos), coloreadas por altura: claras = bajas, oscuras = altas
+const LOW = new THREE.Color(0xa7f3d0), HIGH = new THREE.Color(0x64748b);
+function buildColumns(columns, group) {
+  for (const [x0, x1, y0, y1, h] of columns) {
+    const w = (x1 - x0 + 1) * cell, d = (y1 - y0 + 1) * cell;
+    // Algo transparentes para ver el dron en los mapas densos
+    const mat = new THREE.MeshStandardMaterial({ color: LOW.clone().lerp(HIGH, (h - 15) / 40), roughness: .8,
+      transparent: true, opacity: .75, depthWrite: false });
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x0 * cell + w / 2, h / 2, -(y0 * cell + d / 2));
+    m.castShadow = m.receiveShadow = true;
+    group.add(m);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: 0x334155 }));
+    e.position.copy(m.position);
+    group.add(e);
+  }
 }
 
 // Plataformas A y B con relieve y etiqueta
@@ -155,16 +165,39 @@ function pad(p, color, label) {
 pad(start, 0x4ade80, "A");
 pad(goal, 0xf87171, "B");
 
-// Ruta
-const pts = path.map(toWorld);
-pts[0].y = 1; pts[pts.length - 1].y = 1;  // A y B a ras de plataforma
-const fullLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
-  new THREE.LineDashedMaterial({ color: 0x7dd3fc, dashSize: 1.5, gapSize: 1.5, transparent: true, opacity: .35 }));
-fullLine.computeLineDistances();
-scene.add(fullLine);
-const trailGeo = new THREE.BufferGeometry().setFromPoints(pts);
-trailGeo.setDrawRange(0, 1);
-scene.add(new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8 })));
+// Mapa actual: columnas + ruta (se reconstruye al cambiar de mapa)
+let mapGroup = null, path, result, pts, trailGeo, ep = 0;
+function loadEpisode(i) {
+  ep = (i + episodes.length) % episodes.length;
+  if (mapGroup) {
+    mapGroup.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+    scene.remove(mapGroup);
+  }
+  mapGroup = new THREE.Group();
+  const E = episodes[ep];
+  ({ path, result } = E);
+  buildColumns(E.columns, mapGroup);
+
+  pts = path.map(toWorld);
+  pts[0].y = 1; pts[pts.length - 1].y = 1;  // A y B a ras de plataforma
+  const fullLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineDashedMaterial({ color: 0x7dd3fc, dashSize: 1.5, gapSize: 1.5, transparent: true, opacity: .35 }));
+  fullLine.computeLineDistances();
+  mapGroup.add(fullLine);
+  trailGeo = new THREE.BufferGeometry().setFromPoints(pts);
+  trailGeo.setDrawRange(0, 1);
+  mapGroup.add(new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8 })));
+  scene.add(mapGroup);
+
+  const climbs = path.slice(1).filter((p, k) => p[2] !== path[k][2]
+    && !(p[0] === start[0] && p[1] === start[1]) && !(p[0] === goal[0] && p[1] === goal[1])).length;
+  document.getElementById("title").textContent = `${env} · ${result.toUpperCase()} · ${path.length - 1} pasos`;
+  document.getElementById("mapinfo").textContent =
+    `mapa ${ep + 1}/${episodes.length}` + (E.seed != null ? ` · semilla ${E.seed}` : "") +
+    ` · ${E.columns.length} columnas` + (E.astar ? ` · A*: ${E.astar} pasos` : "") +
+    ` · ${climbs} cambios de altura en vuelo`;
+  t = 0;
+}
 
 // Dron: cuerpo + 4 brazos con rotores
 const drone = new THREE.Group();
@@ -189,20 +222,28 @@ drone.add(crate);
 scene.add(drone);
 
 // Animación
-document.getElementById("title").textContent = `${env} · ${result.toUpperCase()} · ${path.length - 1} pasos`;
 const statusEl = document.getElementById("status");
 const speedEl = document.getElementById("speed");
 let t = 0, playing = true;
+loadEpisode(0);
 const playBtn = document.getElementById("play");
 playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? "⏸ Pausa" : "▶ Seguir"; };
 document.getElementById("restart").onclick = () => { t = 0; };
+document.getElementById("prev").onclick = () => loadEpisode(ep - 1);
+document.getElementById("next").onclick = () => loadEpisode(ep + 1);
+addEventListener("keydown", (e) => {
+  if (e.key === "ArrowRight") loadEpisode(ep + 1);
+  if (e.key === "ArrowLeft") loadEpisode(ep - 1);
+});
 
 const clock = new THREE.Clock();
 function phase(i) {
   if (i >= path.length - 1) return result === "goal" ? "entregado ✅" : result;
-  const [x, y] = path[i];
+  const [x, y, z] = path[i], dz = path[i + 1][2] - z;
   if (x === start[0] && y === start[1]) return "despegue ↑";
   if (x === goal[0] && y === goal[1]) return "descenso ↓";
+  if (dz > 0) return "sube para sobrevolar ↑";
+  if (dz < 0) return "baja ↓";
   return "navegación →";
 }
 renderer.setAnimationLoop(() => {

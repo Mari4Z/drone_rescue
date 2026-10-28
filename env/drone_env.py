@@ -99,16 +99,19 @@ SENSOR_RANGE = 8  # celdas (40 m) que alcanza cada sensor de distancia
 SAFE_ZONE = 2     # celdas libres alrededor de A y B donde no se generan columnas
 
 
-def random_columns(rng, n=5):
+def random_columns(rng, n=(5, 25)):
+    """Entre n[0] y n[1] columnas: desde mapas abiertos hasta mapas densos tipo ciudad.
+    En los densos rodear deja de ser gratis y compensa subir para sobrevolar las columnas bajas."""
+    count = int(rng.integers(n[0], n[1] + 1))
     cols = []
-    while len(cols) < n:
-        w, d = rng.integers(2, 5, size=2)  # 2..4 celdas (10..20 m) de lado
+    while len(cols) < count:
+        w, d = rng.integers(2, 6, size=2)  # 2..5 celdas (10..25 m) de lado
         x0, y0 = int(rng.integers(0, NX - w + 1)), int(rng.integers(0, NY - d + 1))
         x1, y1 = x0 + int(w) - 1, y0 + int(d) - 1
         near = lambda p: x0 - SAFE_ZONE <= p[0] <= x1 + SAFE_ZONE and y0 - SAFE_ZONE <= p[1] <= y1 + SAFE_ZONE
         if near(START) or near(GOAL):
             continue
-        h = int(rng.integers(6, 12)) * CELL  # 30..55 m
+        h = int(rng.integers(3, 12)) * CELL  # 15..55 m
         cols.append((x0, x1, y0, y1, h))
     return cols
 
@@ -121,7 +124,7 @@ class DroneSensorEnv(DroneEnv):
       - ocupación del cubo 3x3x3 alrededor del dron, 1 = bloqueado (27)
     Con columns=None genera un mapa aleatorio en cada reset; con una lista usa ese mapa fijo."""
 
-    def __init__(self, max_steps=250, columns=None, n_columns=5, min_cruise_m=20):
+    def __init__(self, max_steps=250, columns=None, n_columns=(5, 25), min_cruise_m=20):
         super().__init__(max_steps=max_steps, columns=columns or [], min_cruise_m=min_cruise_m)
         self.random_map = columns is None
         self.n_columns = n_columns
