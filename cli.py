@@ -4,6 +4,7 @@ Ejemplos:
   python cli.py rules
   python cli.py train --env DroneRescueDummy-v1 --episodes 6000 --out models/dummy.npy
   python cli.py run --model models/dummy.npy --env DroneRescueDummy-v1 --plot
+  python cli.py run --model models/dummy.npy --web
   python cli.py play --env DroneRescueDummy-v1
 """
 import argparse
@@ -63,6 +64,14 @@ def cmd_run(args):
     if args.plot:
         from plot3d import draw
         draw(path, out=args.plot_out)
+    if args.web:
+        import webbrowser
+
+        from viewer.export import export_html
+        out = Path(export_html(e.unwrapped, path, result, args.env, args.web_out)).resolve()
+        print("vista 3D (three.js) en", out)
+        if not args.no_open:
+            webbrowser.open(out.as_uri())
 
 
 def cmd_play(args):
@@ -112,6 +121,9 @@ def main():
     sp.add_argument("--model", default="models/qtable.npy")
     sp.add_argument("--plot", action="store_true", help="genera además la vista 3D")
     sp.add_argument("--plot-out", default="drone_route.png")
+    sp.add_argument("--web", action="store_true", help="genera la vista 3D interactiva con three.js")
+    sp.add_argument("--web-out", default="drone_view.html")
+    sp.add_argument("--no-open", action="store_true", help="no abrir el navegador")
     sp.set_defaults(fn=cmd_run)
 
     sp = sub.add_parser("play", help="pilota el dron a mano")
