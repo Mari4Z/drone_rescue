@@ -2,3 +2,5 @@
 __pycache__/
 models/
 drone_view.html
+drone_view_*.html
+.DS_Store

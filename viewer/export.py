@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from env.drone_env import CELL, GOAL, START
+from env.drone_env import CELL, GOAL, NX, NY, NZ, START
 
 TEMPLATE = Path(__file__).with_name("template.html")
 
@@ -11,7 +11,7 @@ def export_html(env, path, result, env_id, out="drone_view.html"):
     data = {
         "env": env_id,
         "cell": CELL,
-        "size": [int(n) for n in env.observation_space.nvec],
+        "size": [NX, NY, NZ],
         "start": list(START),
         "goal": list(GOAL),
         "columns": [list(c) for c in env.columns],

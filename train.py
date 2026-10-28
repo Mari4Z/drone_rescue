@@ -3,6 +3,7 @@ from collections import Counter
 import gymnasium as gym
 
 import env  # noqa: F401  (registra DroneRescue-v0)
+from agent.evaluate import run_episode
 from agent.qlearning import QAgent
 from env.drone_env import GOAL
 from visualize import show
@@ -29,13 +30,7 @@ def train(episodes=20000, seed=0, env_id="DroneRescue-v0"):
 
 
 def greedy_path(e, agent):
-    obs, _ = e.reset()
-    path, done = [tuple(obs.tolist())], False
-    while not done:
-        obs, _, terminated, truncated, info = e.step(agent.act(tuple(obs), greedy=True))
-        path.append(tuple(obs.tolist()))
-        done = terminated or truncated
-    return path, info["result"]
+    return run_episode(e, lambda obs: agent.act(tuple(obs), greedy=True))
 
 
 if __name__ == "__main__":
