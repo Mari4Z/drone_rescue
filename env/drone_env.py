@@ -1,4 +1,6 @@
 """Entorno 3D del dron: cuadrícula de 5 m (20 x 20 x 12 celdas = 100 x 100 x 60 m)."""
+from collections import Counter
+
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
@@ -117,25 +119,34 @@ def random_columns(rng, n=(5, 25)):
 
 
 class DroneSensorEnv(DroneEnv):
-    """Observación continua (39 valores, todo en [-1, 1]):
+    """Observación continua (46 valores, todo en [-1, 1]):
       - posición normalizada (3)
       - vector hacia B normalizado (3)
       - 6 sensores de distancia (+x, -x, +y, -y, arriba, abajo), 1 = libre hasta SENSOR_RANGE (6)
       - ocupación del cubo 3x3x3 alrededor del dron, 1 = bloqueado (27)
+      - memoria: visitas a la celda actual y a las 6 vecinas en este intento, 1 = 3 o más (7).
+        Sin ella la política es determinista y puede quedarse oscilando entre dos celdas.
     Con columns=None genera un mapa aleatorio en cada reset; con una lista usa ese mapa fijo."""
 
     def __init__(self, max_steps=250, columns=None, n_columns=(5, 25), min_cruise_m=20):
         super().__init__(max_steps=max_steps, columns=columns or [], min_cruise_m=min_cruise_m)
         self.random_map = columns is None
         self.n_columns = n_columns
-        self.observation_space = spaces.Box(-1.0, 1.0, shape=(39,), dtype=np.float32)
+        self.observation_space = spaces.Box(-1.0, 1.0, shape=(46,), dtype=np.float32)
+        self.visits = Counter()
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
         if self.random_map:
             self.columns = random_columns(self.np_random, self.n_columns)
             self.obstacles = build_obstacles(self.columns)
+        self.visits = Counter({self.pos: 1})
         return self._obs(), {}
+
+    def step(self, action):
+        _, reward, terminated, truncated, info = super().step(action)
+        self.visits[self.pos] += 1
+        return self._obs(), reward, terminated, truncated, info
 
     def _obs(self):
         x, y, z = self.pos
@@ -150,4 +161,6 @@ class DroneSensorEnv(DroneEnv):
             rays.append((d - 1) / SENSOR_RANGE)
         cube = [float(self.blocked(x + i, y + j, z + k))
                 for i in (-1, 0, 1) for j in (-1, 0, 1) for k in (-1, 0, 1)]
-        return np.concatenate([pos, to_goal, rays, cube]).astype(np.float32)
+        memory = [min(self.visits[self.pos], 3) / 3] + [
+            min(self.visits[(x + dx, y + dy, z + dz)], 3) / 3 for dx, dy, dz in ACTIONS]
+        return np.concatenate([pos, to_goal, rays, cube, memory]).astype(np.float32)

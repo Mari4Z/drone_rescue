@@ -5,13 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Drone Rescue 3D</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #0f1720; color: #e6edf3; font: 14px system-ui, sans-serif; overflow: hidden; }
-  #hud { position: absolute; top: 12px; left: 12px; background: rgba(15, 23, 32, .85); padding: 10px 14px; border-radius: 8px; line-height: 1.6; }
+  html, body { margin: 0; height: 100%; background: #0b1220; color: #e6edf3; font: 14px system-ui, sans-serif; overflow: hidden; }
+  canvas { display: block; }
+  .panel { position: absolute; background: rgba(10, 18, 32, .62); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+           border: 1px solid rgba(148, 163, 184, .25); border-radius: 12px; padding: 12px 14px; line-height: 1.55; }
+  #hud { top: 14px; left: 14px; max-width: min(460px, calc(100vw - 60px)); }
   #hud b { color: #7dd3fc; }
-  button { background: #1e293b; color: #e6edf3; border: 1px solid #334155; border-radius: 6px; padding: 4px 10px; cursor: pointer; margin-right: 4px; }
+  #gauges { top: 14px; right: 14px; text-align: right; min-width: 150px; }
+  #gauges .big { font-size: 28px; font-weight: 700; color: #fde68a; font-variant-numeric: tabular-nums; }
+  #phase { font-weight: 600; color: #a5f3fc; }
+  #bar { bottom: 14px; left: 50%; transform: translateX(-50%); width: min(720px, calc(100vw - 60px)); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #timeline { flex: 1; min-width: 160px; accent-color: #38bdf8; }
+  button { background: rgba(30, 41, 59, .9); color: #e6edf3; border: 1px solid #334155; border-radius: 8px; padding: 5px 10px; cursor: pointer; font: inherit; }
   button:hover { background: #334155; }
+  button.on { background: #0369a1; border-color: #38bdf8; }
+  .muted { opacity: .7; font-size: 12px; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; background: #0f172a; border: 1px solid #334155; font-size: 12px; }
   .a { color: #4ade80; } .b { color: #f87171; }
-  #error { display: none; position: absolute; inset: 0; margin: auto; width: min(560px, 90vw); height: fit-content; background: #3f1d1d; border: 1px solid #f87171; border-radius: 8px; padding: 16px 20px; line-height: 1.5; }
+  #error { display: none; position: absolute; inset: 0; margin: auto; width: min(560px, 90vw); height: fit-content; background: #3f1d1d; border: 1px solid #f87171; border-radius: 8px; padding: 16px 20px; line-height: 1.5; z-index: 9; }
   #error code { background: #0f1720; padding: 2px 6px; border-radius: 4px; }
 </style>
 <script>
@@ -41,28 +52,44 @@
 </script>
 </head>
 <body>
-<div id="hud">
+<div id="hud" class="panel">
   <div><b id="title"></b></div>
-  <div><span class="a">● A</span> inicio &nbsp; <span class="b">● B</span> meta</div>
-  <div id="mapinfo"></div>
-  <div id="status"></div>
-  <div style="margin-top:6px">
-    <button id="prev">◀ Mapa</button><button id="next">Mapa ▶</button>
-    <button id="play">⏸ Pausa</button><button id="restart">↺ Reiniciar</button>
-    <label>velocidad <input id="speed" type="range" min="1" max="20" value="6"></label>
-  </div>
-  <div style="margin-top:4px; opacity:.7">columnas: <span style="color:#a7f3d0">baja</span> → <span style="color:#64748b">alta</span> · ←/→ cambia de mapa</div>
+  <div id="mapinfo" class="muted"></div>
+  <div style="margin-top:4px"><span class="a">● A</span> despegue &nbsp; <span class="b">● B</span> entrega
+    &nbsp; <span class="muted">edificios: <span style="color:#cbd5e1">bajos</span> → <span style="color:#94a3b8">altos</span></span></div>
+  <div style="margin-top:6px"><span class="badge" id="engine"></span></div>
+</div>
+<div id="gauges" class="panel">
+  <div class="muted">altura</div>
+  <div class="big" id="alt">0 m</div>
+  <div id="phase"></div>
+  <div class="muted" id="stepinfo"></div>
+</div>
+<div id="bar" class="panel">
+  <button id="prev" title="mapa anterior (←)">◀ mapa</button>
+  <button id="next" title="mapa siguiente (→)">mapa ▶</button>
+  <button id="play" title="pausa (espacio)">⏸ pausa</button>
+  <input id="timeline" type="range" min="0" max="1" step="0.01" value="0">
+  <button id="cam" title="cambiar cámara (C)">🎥 Libre</button>
+  <button id="xray" title="edificios transparentes (X)">Rayos X</button>
+  <label class="muted">vel <input id="speed" type="range" min="1" max="20" value="5" style="width:70px"></label>
 </div>
 <div id="error"></div>
 <script type="module">
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { Sky } from "three/addons/objects/Sky.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 
 const DATA = /*DATA*/null;
 window.__droneReady = true;
 if (!DATA) {
   showError(`Esta es la <b>plantilla</b>, no tiene datos. Genera la vista con:<br><br>
-    <code>.venv/bin/python cli.py run --model models/dummy.npy --web</code><br><br>
+    <code>.venv/bin/python cli.py run --model models/dqn.pt --web</code><br><br>
     y abre <code>drone_view.html</code> (en la raíz del proyecto).`);
   throw new Error("sin datos");
 }
@@ -75,196 +102,467 @@ const { cell, size, start, goal, env } = DATA;
 const episodes = DATA.episodes || [{ columns: DATA.columns, path: DATA.path, result: DATA.result }];
 const [NX, NY, NZ] = size;
 const W = NX * cell, D = NY * cell, H = NZ * cell;
+const CENTER = new THREE.Vector3(W / 2, 0, -D / 2);
+document.getElementById("engine").textContent = `three.js r${THREE.REVISION} · WebGL2`;
 
 // Coordenadas: x del entorno -> x, y del entorno -> -z, altura -> y (y arriba en three.js)
 const toWorld = ([x, y, z]) => new THREE.Vector3((x + .5) * cell, (z + .5) * cell, -(y + .5) * cell);
+const isPad = (p) => (p[0] === start[0] && p[1] === start[1]) || (p[0] === goal[0] && p[1] === goal[1]);
 
+// ---------- Render, cámara, postproceso ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(devicePixelRatio);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.55;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0f1720);
-scene.fog = new THREE.Fog(0x0f1720, 250, 500);
+scene.fog = new THREE.Fog(0xb7cde3, 260, 900);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;  // reflejos suaves
 
-const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 1, 2000);
-camera.position.set(W + 50, 105, 45);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, 6000);
+camera.position.set(W + 55, 95, 40);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(W / 2, 15, -D / 2);
+controls.target.set(W / 2, 12, -D / 2);
 controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.49;  // no atravesar el suelo
+controls.minDistance = 10;
+controls.maxDistance = 600;
 
-scene.add(new THREE.HemisphereLight(0xbfd9ff, 0x223322, 0.8));
-const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-sun.position.set(-40, 120, 40);
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.6, 0.4, 0.92);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+// ---------- Cielo y luz ----------
+const sky = new Sky();
+sky.scale.setScalar(5000);
+scene.add(sky);
+const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(58), THREE.MathUtils.degToRad(210));
+sky.material.uniforms.turbidity.value = 6;
+sky.material.uniforms.rayleigh.value = 1.6;
+sky.material.uniforms.mieCoefficient.value = 0.004;
+sky.material.uniforms.mieDirectionalG.value = 0.85;
+sky.material.uniforms.sunPosition.value.copy(sunDir);
+
+scene.add(new THREE.HemisphereLight(0xdbeafe, 0x3f4f2f, 1.1));
+const sun = new THREE.DirectionalLight(0xfff1dc, 3.2);
+sun.position.copy(CENTER).addScaledVector(sunDir, 160);
+sun.target.position.copy(CENTER);
 sun.castShadow = true;
-Object.assign(sun.shadow.camera, { left: -120, right: 120, top: 120, bottom: -120, far: 400 });
+Object.assign(sun.shadow.camera, { left: -90, right: 90, top: 90, bottom: -90, near: 10, far: 400 });
 sun.shadow.mapSize.set(2048, 2048);
-scene.add(sun);
+sun.shadow.bias = -0.0005;
+scene.add(sun, sun.target);
 
-// Suelo, rejilla y límites del espacio de vuelo
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(W, D), new THREE.MeshStandardMaterial({ color: 0x1d3b2a }));
-ground.rotation.x = -Math.PI / 2;
-ground.position.set(W / 2, 0, -D / 2);
-ground.receiveShadow = true;
-scene.add(ground);
-const grid = new THREE.GridHelper(W, NX, 0x3b6b4f, 0x2a4a38);
-grid.position.set(W / 2, 0.05, -D / 2);
-scene.add(grid);
-const bounds = new THREE.LineSegments(
-  new THREE.EdgesGeometry(new THREE.BoxGeometry(W, H, D)),
-  new THREE.LineBasicMaterial({ color: 0x475569, transparent: true, opacity: .5 }));
-bounds.position.set(W / 2, H / 2, -D / 2);
+// ---------- Texturas procedurales (canvas) ----------
+function canvasTex(w, h, draw, repeat = [1, 1]) {
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  draw(c.getContext("2d"), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(...repeat);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+const rand = (() => { let s = 7; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+
+const grassTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = "#4d6b3a"; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 5000; i++) {
+    const v = 60 + rand() * 50 | 0;
+    g.fillStyle = `rgba(${v - 20},${v + 30},${v - 30},.35)`;
+    g.fillRect(rand() * w, rand() * h, 2, 2);
+  }
+}, [60, 60]);
+const plazaTex = canvasTex(128, 128, (g, w, h) => {
+  g.fillStyle = "#8d949c"; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 1500; i++) { g.fillStyle = `rgba(0,0,0,${rand() * .08})`; g.fillRect(rand() * w, rand() * h, 2, 2); }
+  g.strokeStyle = "rgba(40,44,52,.55)"; g.lineWidth = 3; g.strokeRect(0, 0, w, h);  // juntas = rejilla de 5 m
+}, [NX, NY]);
+// Fachada: una celda de 5 x 5 m con 2 x 2 ventanas; mapa de emisión con algunas encendidas
+const facadeTex = canvasTex(128, 128, (g, w, h) => {
+  g.fillStyle = "#d6d9de"; g.fillRect(0, 0, w, h);
+  g.fillStyle = "#c3c7cd"; g.fillRect(0, h - 10, w, 10);
+  for (const [x, y] of [[14, 14], [72, 14], [14, 70], [72, 70]]) {
+    const grad = g.createLinearGradient(x, y, x + 42, y + 44);
+    grad.addColorStop(0, "#5b7a99"); grad.addColorStop(1, "#22364d");
+    g.fillStyle = grad; g.fillRect(x, y, 42, 44);
+    g.fillStyle = "rgba(255,255,255,.18)"; g.fillRect(x + 2, y + 2, 12, 40);
+  }
+});
+const facadeGlow = canvasTex(128, 128, (g, w, h) => {
+  g.fillStyle = "#000"; g.fillRect(0, 0, w, h);
+  g.fillStyle = "#ffcf7a"; g.fillRect(72, 70, 42, 44);
+});
+const roofTex = canvasTex(128, 128, (g, w, h) => {
+  g.fillStyle = "#59606b"; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 800; i++) { g.fillStyle = `rgba(255,255,255,${rand() * .06})`; g.fillRect(rand() * w, rand() * h, 3, 3); }
+  g.strokeStyle = "#3b4048"; g.lineWidth = 6; g.strokeRect(3, 3, w - 6, h - 6);
+});
+
+// ---------- Terreno ----------
+const grass = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshStandardMaterial({ map: grassTex, roughness: 1 }));
+grass.rotation.x = -Math.PI / 2;
+grass.position.copy(CENTER).setY(-0.05);
+grass.receiveShadow = true;
+scene.add(grass);
+const plaza = new THREE.Mesh(new THREE.PlaneGeometry(W, D), new THREE.MeshStandardMaterial({ map: plazaTex, roughness: .9 }));
+plaza.rotation.x = -Math.PI / 2;
+plaza.position.copy(CENTER).setY(0.02);
+plaza.receiveShadow = true;
+scene.add(plaza);
+// Límite del espacio de vuelo (100 x 100 x 60 m)
+const bounds = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(W, H, D)),
+  new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: .18 }));
+bounds.position.copy(CENTER).setY(H / 2);
 scene.add(bounds);
 
-// Columnas (obstáculos), coloreadas por altura: claras = bajas, oscuras = altas
-const LOW = new THREE.Color(0xa7f3d0), HIGH = new THREE.Color(0x64748b);
-function buildColumns(columns, group) {
-  for (const [x0, x1, y0, y1, h] of columns) {
-    const w = (x1 - x0 + 1) * cell, d = (y1 - y0 + 1) * cell;
-    // Algo transparentes para ver el dron en los mapas densos
-    const mat = new THREE.MeshStandardMaterial({ color: LOW.clone().lerp(HIGH, (h - 15) / 40), roughness: .8,
-      transparent: true, opacity: .75, depthWrite: false });
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    m.position.set(x0 * cell + w / 2, h / 2, -(y0 * cell + d / 2));
-    m.castShadow = m.receiveShadow = true;
-    group.add(m);
-    const e = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: 0x334155 }));
-    e.position.copy(m.position);
-    group.add(e);
-  }
-}
-
-// Plataformas A y B con relieve y etiqueta
-function pad(p, color, label) {
+// ---------- Helipuertos A y B ----------
+const pads = [];
+function helipad(p, color, label) {
+  const hex = "#" + color.toString(16).padStart(6, "0");
   const g = new THREE.Group();
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(cell * .55, cell * .6, 1, 32),
-    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: .4 }));
-  base.position.y = .5;
-  g.add(base);
-  const beam = new THREE.Mesh(new THREE.CylinderGeometry(.3, .3, H, 8),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .25 }));
+  const top = canvasTex(256, 256, (c, w, h) => {
+    c.fillStyle = "#1f2937"; c.fillRect(0, 0, w, h);
+    c.strokeStyle = hex; c.lineWidth = 14; c.beginPath(); c.arc(128, 128, 108, 0, Math.PI * 2); c.stroke();
+    c.fillStyle = "#f8fafc"; c.font = "bold 150px system-ui"; c.textAlign = "center"; c.textBaseline = "middle";
+    c.fillText("H", 128, 136);
+  });
+  const side = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: .3, roughness: .6 });
+  const disk = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.6, 0.8, 48),
+    [side, new THREE.MeshStandardMaterial({ map: top, roughness: .7 }), side]);
+  disk.position.y = 0.4;
+  disk.castShadow = disk.receiveShadow = true;
+  g.add(disk);
+  const lights = [];
+  for (let k = 0; k < 8; k++) {
+    const a = k / 8 * Math.PI * 2;
+    const l = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 8), new THREE.MeshBasicMaterial({ color }));
+    l.position.set(Math.cos(a) * 4.4, 0.95, Math.sin(a) * 4.4);
+    g.add(l);
+    lights.push(l);
+  }
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 2.2, H, 24, 1, true),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .08, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
   beam.position.y = H / 2;
   g.add(beam);
-  const c = document.createElement("canvas");
-  c.width = c.height = 128;
-  const ctx = c.getContext("2d");
-  ctx.fillStyle = "#" + color.toString(16).padStart(6, "0");
-  ctx.font = "bold 100px system-ui";
-  ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillText(label, 64, 70);
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c) }));
-  s.scale.set(8, 8, 1);
+  const lc = document.createElement("canvas");
+  lc.width = 256; lc.height = 128;
+  const ctx = lc.getContext("2d");
+  ctx.fillStyle = "rgba(15,23,42,.8)"; ctx.beginPath(); ctx.roundRect(8, 8, 240, 112, 30); ctx.fill();
+  ctx.strokeStyle = hex; ctx.lineWidth = 6; ctx.stroke();
+  ctx.fillStyle = hex; ctx.font = "bold 70px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(label, 128, 68);
+  const labelTex = new THREE.CanvasTexture(lc); labelTex.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex, depthTest: false }));
+  s.scale.set(14, 7, 1);
   s.position.y = 12;
+  s.renderOrder = 10;
   g.add(s);
   const w = toWorld(p);
   g.position.set(w.x, 0, w.z);
   scene.add(g);
+  pads.push({ lights, color: new THREE.Color(color) });
 }
-pad(start, 0x4ade80, "A");
-pad(goal, 0xf87171, "B");
+helipad(start, 0x4ade80, "A");
+helipad(goal, 0xf87171, "B");
 
-// Mapa actual: columnas + ruta (se reconstruye al cambiar de mapa)
-let mapGroup = null, path, result, pts, trailGeo, ep = 0;
+// ---------- Edificios (columnas) ----------
+const LOW = new THREE.Color(0xe2e8f0), HIGH = new THREE.Color(0x64748b);
+const roofMat = new THREE.MeshStandardMaterial({ map: roofTex, roughness: .9 });
+let buildingMats = [], xray = false;
+function building(x0, x1, y0, y1, h, group) {
+  const w = (x1 - x0 + 1) * cell, d = (y1 - y0 + 1) * cell;
+  const geo = new THREE.BoxGeometry(w, h, d);
+  // Ajusta las UV de cada cara para que la fachada se repita cada 5 m (ventanas a escala real)
+  const uv = geo.attributes.uv;
+  const faceSize = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];  // +x, -x, +y, -y, +z, -z
+  for (let f = 0; f < 6; f++)
+    for (let v = 0; v < 4; v++) {
+      const i = f * 4 + v;
+      uv.setXY(i, uv.getX(i) * faceSize[f][0] / cell, uv.getY(i) * faceSize[f][1] / cell);
+    }
+  const tint = LOW.clone().lerp(HIGH, (h - 15) / 40);
+  const side = new THREE.MeshStandardMaterial({ map: facadeTex, color: tint, emissiveMap: facadeGlow,
+    emissive: 0xffd28a, emissiveIntensity: 0.12, roughness: .55, metalness: .15, transparent: true, opacity: xray ? .25 : 1 });
+  buildingMats.push(side);
+  const m = new THREE.Mesh(geo, [side, side, roofMat, roofMat, side, side]);
+  m.position.set(x0 * cell + w / 2, h / 2, -(y0 * cell + d / 2));
+  m.castShadow = m.receiveShadow = true;
+  group.add(m);
+  // Pretil y antena en la azotea
+  const parapet = new THREE.Mesh(new THREE.BoxGeometry(w + .4, .8, d + .4), new THREE.MeshStandardMaterial({ color: 0x475569 }));
+  parapet.position.set(m.position.x, h + .4, m.position.z);
+  parapet.castShadow = true;
+  group.add(parapet);
+  if (h >= 40) {
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(.12, .12, 5, 6), new THREE.MeshStandardMaterial({ color: 0x94a3b8 }));
+    mast.position.set(m.position.x, h + 3, m.position.z);
+    group.add(mast);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(.3, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff3b3b }));
+    tip.position.set(m.position.x, h + 5.6, m.position.z);
+    tip.userData.blink = true;
+    group.add(tip);
+  }
+}
+function setXray(on) {
+  xray = on;
+  for (const m of buildingMats) { m.opacity = on ? .25 : 1; m.depthWrite = !on; }
+  document.getElementById("xray").classList.toggle("on", on);
+}
+
+// ---------- Dron ----------
+function makeDrone() {
+  const d = new THREE.Group();          // posición + orientación (yaw/inclinación)
+  const dark = new THREE.MeshStandardMaterial({ color: 0x1f2937, metalness: .6, roughness: .35 });
+  const shell = new THREE.MeshStandardMaterial({ color: 0xf8fafc, metalness: .2, roughness: .3 });
+  const accent = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: .3, roughness: .4 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.55, 1.2, 6, 16), shell);
+  body.rotation.x = Math.PI / 2;        // eje largo hacia delante (-Z)
+  body.castShadow = true;
+  d.add(body);
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.15, .12, 1.4), accent);
+  stripe.position.y = .32;
+  d.add(stripe);
+  const cam = new THREE.Mesh(new THREE.SphereGeometry(.28, 16, 12), new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: .9, roughness: .1 }));
+  cam.position.set(0, -.25, -1.05);
+  d.add(cam);
+  const props = [];
+  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+    const len = 2.1;
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(.09, .12, len, 8), dark);
+    arm.rotation.z = Math.PI / 2;
+    arm.rotation.y = Math.atan2(sz, -sx);
+    arm.position.set(sx * len / 2 * .72, .1, sz * len / 2 * .72);
+    arm.castShadow = true;
+    d.add(arm);
+    const mx = sx * 1.55, mz = sz * 1.55;
+    const motor = new THREE.Mesh(new THREE.CylinderGeometry(.22, .22, .35, 14), dark);
+    motor.position.set(mx, .25, mz);
+    d.add(motor);
+    const prop = new THREE.Group();
+    prop.position.set(mx, .47, mz);
+    for (let k = 0; k < 2; k++) {
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(1.7, .03, .16), new THREE.MeshStandardMaterial({ color: 0x0f172a }));
+      blade.rotation.y = k * Math.PI / 2;
+      prop.add(blade);
+    }
+    const blur = new THREE.Mesh(new THREE.CircleGeometry(.9, 32),
+      new THREE.MeshBasicMaterial({ color: 0xcbd5e1, transparent: true, opacity: .12, depthWrite: false, side: THREE.DoubleSide }));
+    blur.rotation.x = -Math.PI / 2;
+    prop.add(blur);
+    d.add(prop);
+    props.push(prop);
+    // Patas de aterrizaje
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(.05, .05, .8, 6), dark);
+    leg.position.set(sx * .55, -.55, sz * .55);
+    d.add(leg);
+  }
+  // Luces de navegación: roja a babor (izquierda), verde a estribor, estroboscópica blanca
+  const navL = new THREE.Mesh(new THREE.SphereGeometry(.13, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff2d2d }));
+  navL.position.set(-1.55, .25, -1.55);
+  const navR = new THREE.Mesh(new THREE.SphereGeometry(.13, 10, 8), new THREE.MeshBasicMaterial({ color: 0x22ff6a }));
+  navR.position.set(1.55, .25, -1.55);
+  const strobe = new THREE.Mesh(new THREE.SphereGeometry(.12, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  strobe.position.set(0, .45, .7);
+  d.add(navL, navR, strobe);
+  // Caja de suministros colgando
+  const rope = new THREE.Mesh(new THREE.CylinderGeometry(.03, .03, 1.4, 4), new THREE.MeshBasicMaterial({ color: 0x111827 }));
+  rope.position.y = -1.2;
+  const crate = new THREE.Mesh(new THREE.BoxGeometry(1, .8, 1), new THREE.MeshStandardMaterial({ color: 0xb45309, roughness: .8 }));
+  crate.position.y = -2.2;
+  crate.castShadow = true;
+  const cross = new THREE.Mesh(new THREE.BoxGeometry(1.02, .2, .3), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+  cross.position.y = -2.2;
+  const cross2 = cross.clone(); cross2.rotation.y = Math.PI / 2;
+  d.add(rope, crate, cross, cross2);
+  d.userData = { props, strobe };
+  return d;
+}
+const drone = makeDrone();
+drone.scale.setScalar(1.5);  // algo más grande que a escala real para verlo bien
+scene.add(drone);
+// Luz que acompaña al dron (ilumina edificios cercanos)
+const droneLight = new THREE.PointLight(0xfff7e0, 25, 25, 2);
+droneLight.position.y = -3;  // debajo del dron: ilumina el entorno sin quemar el cuerpo
+drone.add(droneLight);
+
+// ---------- Mapa actual: edificios + ruta ----------
+let mapGroup = null, path, result, pts, curve, trail, ep = 0, segs = 1, t = 0;
+const RADIAL = 8, PER_SEG = 6;
 function loadEpisode(i) {
   ep = (i + episodes.length) % episodes.length;
   if (mapGroup) {
-    mapGroup.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+    mapGroup.traverse((o) => {
+      o.geometry?.dispose();
+      for (const m of [].concat(o.material || [])) if (m !== roofMat) m.dispose();
+    });
     scene.remove(mapGroup);
   }
   mapGroup = new THREE.Group();
+  buildingMats = [];
   const E = episodes[ep];
   ({ path, result } = E);
-  buildColumns(E.columns, mapGroup);
+  for (const c of E.columns) building(...c, mapGroup);
 
   pts = path.map(toWorld);
-  pts[0].y = 1; pts[pts.length - 1].y = 1;  // A y B a ras de plataforma
-  const fullLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
-    new THREE.LineDashedMaterial({ color: 0x7dd3fc, dashSize: 1.5, gapSize: 1.5, transparent: true, opacity: .35 }));
-  fullLine.computeLineDistances();
-  mapGroup.add(fullLine);
-  trailGeo = new THREE.BufferGeometry().setFromPoints(pts);
-  trailGeo.setDrawRange(0, 1);
-  mapGroup.add(new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8 })));
+  pts[0].y = 1.6; pts[pts.length - 1].y = 1.6;  // A y B a ras de helipuerto
+  // Ruta como tubo: la completa tenue y el tramo recorrido brillante
+  curve = new THREE.CurvePath();
+  for (let k = 0; k < pts.length - 1; k++) curve.add(new THREE.LineCurve3(pts[k], pts[k + 1]));
+  segs = Math.max(1, pts.length - 1);
+  const ghost = new THREE.Mesh(new THREE.TubeGeometry(curve, segs * PER_SEG, .18, RADIAL, false),
+    new THREE.MeshBasicMaterial({ color: 0x7dd3fc, transparent: true, opacity: .28, depthWrite: false }));
+  trail = new THREE.Mesh(new THREE.TubeGeometry(curve, segs * PER_SEG, .32, RADIAL, false),
+    new THREE.MeshStandardMaterial({ color: 0x0ea5e9, emissive: 0x38bdf8, emissiveIntensity: 2.2 }));
+  trail.geometry.setDrawRange(0, 0);
+  mapGroup.add(ghost, trail);
   scene.add(mapGroup);
 
-  const climbs = path.slice(1).filter((p, k) => p[2] !== path[k][2]
-    && !(p[0] === start[0] && p[1] === start[1]) && !(p[0] === goal[0] && p[1] === goal[1])).length;
-  document.getElementById("title").textContent = `${env} · ${result.toUpperCase()} · ${path.length - 1} pasos`;
+  const climbs = path.slice(1).filter((p, k) => p[2] !== path[k][2] && !isPad(p)).length;
+  document.getElementById("title").textContent = `${env} · ${result === "goal" ? "ENTREGADO" : result.toUpperCase()} · ${path.length - 1} pasos`;
   document.getElementById("mapinfo").textContent =
     `mapa ${ep + 1}/${episodes.length}` + (E.seed != null ? ` · semilla ${E.seed}` : "") +
-    ` · ${E.columns.length} columnas` + (E.astar ? ` · A*: ${E.astar} pasos` : "") +
+    ` · ${E.columns.length} edificios` + (E.astar ? ` · A*: ${E.astar} pasos` : "") +
     ` · ${climbs} cambios de altura en vuelo`;
+  timeline.max = segs;
   t = 0;
 }
 
-// Dron: cuerpo + 4 brazos con rotores
-const drone = new THREE.Group();
-const body = new THREE.Mesh(new THREE.BoxGeometry(2.4, .8, 2.4), new THREE.MeshStandardMaterial({ color: 0xfacc15 }));
-body.castShadow = true;
-drone.add(body);
-const rotors = [];
-for (const [dx, dz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
-  const arm = new THREE.Mesh(new THREE.BoxGeometry(.3, .3, 2.6), new THREE.MeshStandardMaterial({ color: 0x1f2937 }));
-  arm.position.set(dx * .9, 0, dz * .9);
-  arm.rotation.y = Math.atan2(dx, dz);
-  drone.add(arm);
-  const r = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, .1, 16),
-    new THREE.MeshStandardMaterial({ color: 0xe2e8f0, transparent: true, opacity: .6 }));
-  r.position.set(dx * 1.8, .5, dz * 1.8);
-  drone.add(r);
-  rotors.push(r);
+// ---------- Controles de la interfaz ----------
+const $ = (id) => document.getElementById(id);
+const timeline = $("timeline"), speedEl = $("speed"), playBtn = $("play"), camBtn = $("cam");
+let playing = true, scrubbing = false;
+const CAMS = ["Libre", "Seguir", "Piloto"];
+let camMode = 0, snapCam = false;
+function setPlaying(p) { playing = p; playBtn.textContent = p ? "⏸ pausa" : "⏵ play"; }
+function setCam(k) {
+  camMode = k % CAMS.length;
+  camBtn.textContent = "🎥 " + CAMS[camMode];
+  controls.enabled = camMode === 0;
+  snapCam = true;  // colocarse ya detrás del dron, luego seguirlo suavemente
+  if (camMode === 0) { controls.target.copy(drone.position); controls.update(); }
 }
-const crate = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), new THREE.MeshStandardMaterial({ color: 0xb45309 }));
-crate.position.y = -1;
-drone.add(crate);
-scene.add(drone);
-
-// Animación
-const statusEl = document.getElementById("status");
-const speedEl = document.getElementById("speed");
-let t = 0, playing = true;
-loadEpisode(0);
-const playBtn = document.getElementById("play");
-playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? "⏸ Pausa" : "▶ Seguir"; };
-document.getElementById("restart").onclick = () => { t = 0; };
-document.getElementById("prev").onclick = () => loadEpisode(ep - 1);
-document.getElementById("next").onclick = () => loadEpisode(ep + 1);
+playBtn.onclick = () => setPlaying(!playing);
+$("prev").onclick = () => loadEpisode(ep - 1);
+$("next").onclick = () => loadEpisode(ep + 1);
+camBtn.onclick = () => setCam(camMode + 1);
+$("xray").onclick = () => setXray(!xray);
+timeline.addEventListener("input", () => { scrubbing = true; t = +timeline.value; });
+timeline.addEventListener("change", () => { scrubbing = false; });
 addEventListener("keydown", (e) => {
   if (e.key === "ArrowRight") loadEpisode(ep + 1);
-  if (e.key === "ArrowLeft") loadEpisode(ep - 1);
+  else if (e.key === "ArrowLeft") loadEpisode(ep - 1);
+  else if (e.key === " ") { setPlaying(!playing); e.preventDefault(); }
+  else if (e.key.toLowerCase() === "c") setCam(camMode + 1);
+  else if (e.key.toLowerCase() === "x") setXray(!xray);
 });
+// Parámetros opcionales en la URL, p. ej. drone_view.html#map=2&cam=1&xray=1&t=20&pause=1
+const params = new URLSearchParams(location.hash.slice(1));
+loadEpisode(+(params.get("map") || 1) - 1);
+if (params.has("cam")) setCam(+params.get("cam"));
+if (params.get("xray") === "1") setXray(true);
+if (params.has("t")) t = +params.get("t");
+if (params.get("pause") === "1") setPlaying(false);
 
-const clock = new THREE.Clock();
 function phase(i) {
-  if (i >= path.length - 1) return result === "goal" ? "entregado ✅" : result;
+  if (i >= path.length - 1) return result === "goal" ? "✅ suministros entregados" : result === "crash" ? "💥 choque" : "⌛ sin tiempo";
   const [x, y, z] = path[i], dz = path[i + 1][2] - z;
-  if (x === start[0] && y === start[1]) return "despegue ↑";
-  if (x === goal[0] && y === goal[1]) return "descenso ↓";
-  if (dz > 0) return "sube para sobrevolar ↑";
-  if (dz < 0) return "baja ↓";
-  return "navegación →";
+  if (x === start[0] && y === start[1]) return "⬆ despegue vertical";
+  if (x === goal[0] && y === goal[1]) return "⬇ aterrizaje vertical";
+  if (dz > 0) return "⬆ sube para sobrevolar";
+  if (dz < 0) return "⬇ baja";
+  return "➜ navegación";
 }
+
+// ---------- Bucle de animación ----------
+const clock = new THREE.Clock();
+const heading = new THREE.Vector3(1, 0, -1).normalize();
+let yaw = Math.atan2(-heading.x, -heading.z), pitch = 0, roll = 0;
+const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 renderer.setAnimationLoop(() => {
-  const dt = clock.getDelta();
-  if (playing) t = Math.min(t + dt * speedEl.value, pts.length - 1);
-  const i = Math.floor(t), f = t - i;
-  const p = pts[i].clone().lerp(pts[Math.min(i + 1, pts.length - 1)], f);
-  drone.position.copy(p).add(new THREE.Vector3(0, 1.5, 0));
-  for (const r of rotors) r.rotation.y += dt * 40;
-  trailGeo.setDrawRange(0, i + 2);
-  const [, , z] = path[i];
-  statusEl.textContent = `paso ${i}/${path.length - 1} · altura ${z * cell} m · ${phase(i)}`;
-  if (t >= pts.length - 1 && playing) setTimeout(() => { if (t >= pts.length - 1) t = 0; }, 1500);
-  controls.update();
-  renderer.render(scene, camera);
+  const dt = Math.min(clock.getDelta(), 0.05), time = clock.elapsedTime;
+  if (playing && !scrubbing) {
+    t += dt * speedEl.value;
+    if (t > segs + 2) t = 0;  // pausa breve al final y vuelve a empezar
+  }
+  const tc = Math.min(t, segs);
+  const i = Math.min(Math.floor(tc), segs - 1), f = tc - i;
+  const a = pts[i], b = pts[Math.min(i + 1, pts.length - 1)];
+  // Suavizado de la posición entre celdas (arranca y frena en cada tramo)
+  const s = f * f * (3 - 2 * f);
+  const pos = a.clone().lerp(b, s);
+  drone.position.copy(pos).add(new THREE.Vector3(0, 1.2, 0));
+
+  // Orientación: gira hacia donde va y se inclina al acelerar (como un dron real)
+  const dir = b.clone().sub(a);
+  const horiz = new THREE.Vector3(dir.x, 0, dir.z);
+  const moving = tc < segs;
+  if (horiz.lengthSq() > 0.01 && moving) heading.copy(horiz.normalize());
+  const targetYaw = Math.atan2(-heading.x, -heading.z);
+  let dy = targetYaw - yaw;
+  dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+  yaw += dy * Math.min(1, dt * 6);
+  const effort = moving && horiz.lengthSq() > 0.01 ? Math.sin(Math.PI * f) : 0;
+  pitch += (-0.28 * effort - pitch) * Math.min(1, dt * 8);
+  roll += (-dy * 0.6 - roll) * Math.min(1, dt * 6);
+  drone.rotation.set(pitch, yaw, roll, "YXZ");
+  for (const p of drone.userData.props) p.rotation.y += dt * (moving ? 60 : 25);
+  drone.userData.strobe.visible = (time % 1.2) < 0.08;
+
+  // Estela: tramo recorrido del tubo
+  trail.geometry.setDrawRange(0, Math.floor(tc * PER_SEG) * RADIAL * 6);
+  if (!scrubbing) timeline.value = tc;
+
+  // Luces parpadeantes (helipuertos y antenas)
+  pads.forEach((pd, k) => {
+    const on = 0.35 + 0.65 * Math.max(0, Math.sin(time * 4 + k * Math.PI));
+    pd.lights.forEach((l, j) => l.material.color.copy(pd.color).multiplyScalar(on * (j % 2 ? 1 : 0.7) * 2));
+  });
+  const blinkOn = (time % 1.6) < 0.8;
+  mapGroup.traverse((o) => { if (o.userData.blink) o.visible = blinkOn; });
+
+  // Cámaras
+  const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  if (camMode === 1) {        // sigue al dron desde atrás y arriba
+    // Casi en vertical sobre el dron: los edificios salen del suelo, así que encima del dron nunca hay
+    // nada que lo tape. Un poco por detrás para ver hacia dónde va.
+    camPos.copy(drone.position).addScaledVector(fwd, -8);
+    camPos.y = H + 20;
+    camera.position.lerp(camPos, snapCam ? 1 : Math.min(1, dt * 3));
+    camLook.lerp(drone.position, snapCam ? 1 : Math.min(1, dt * 8));
+    snapCam = false;
+    camera.lookAt(camLook);
+  } else if (camMode === 2) { // primera persona desde la cámara del dron
+    camera.position.copy(drone.position).addScaledVector(fwd, 2.2).add(new THREE.Vector3(0, -0.2, 0));
+    camera.lookAt(camera.position.clone().addScaledVector(fwd, 20).add(new THREE.Vector3(0, -2, 0)));
+  } else {
+    camLook.copy(drone.position);
+    controls.update();
+  }
+
+  // Panel
+  const zNow = path[i][2] + (path[Math.min(i + 1, path.length - 1)][2] - path[i][2]) * s;
+  $("alt").textContent = `${Math.round(zNow * cell)} m`;
+  $("phase").textContent = phase(i + (tc >= segs ? 1 : 0));
+  $("stepinfo").textContent = `paso ${Math.min(Math.round(tc), segs)}/${segs}`;
+
+  composer.render();
 });
 
 addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
 });
 </script>
 </body>

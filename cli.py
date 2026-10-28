@@ -52,6 +52,10 @@ def load_policy(model, device="auto"):
     if algo_of(model) == "dqn":
         from agent.dqn import DQNAgent
         agent = DQNAgent.load(model, device)
+        n_obs = gym.make("DroneRescueRandom-v2").observation_space.shape[0]
+        if agent.q.net[0].in_features != n_obs:
+            raise SystemExit(f"{model} espera {agent.q.net[0].in_features} observaciones y el entorno da {n_obs}: "
+                             "es de una versión anterior del entorno, vuelve a entrenarlo")
         return agent, agent.act
     from agent.qlearning import QAgent
     agent = QAgent((NX, NY, NZ), 6)
