@@ -17,8 +17,24 @@ def load_config(config_path: str | Path | None = None) -> dict:
     path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
     with path.open(encoding="utf-8") as config_file:
         config = yaml.safe_load(config_file)
+    parent_reference = config.pop("_extends", None)
+    if parent_reference:
+        parent_path = (path.parent / parent_reference).resolve()
+        parent = load_config(parent_path)
+        config = _merge_config(parent, config)
     _validate_config(config)
     return config
+
+
+def _merge_config(base: dict, override: dict) -> dict:
+    """Combina mapas YAML sin sustituir secciones hermanas accidentalmente."""
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _merge_config(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
 
 
 def _validate_config(config: dict) -> None:

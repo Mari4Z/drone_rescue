@@ -1,0 +1,11 @@
+_extends: ../drone_rescue.yaml
+experiment:
+  id: exp-004
+  version: 1.0.0
+  hypothesis: "Aumentar la masa reduce la aceleración disponible y alarga las misiones exitosas."
+  changed_dimension: physics.mass_kg
+  episode_budget: 5000
+  seeds: [11, 23, 37, 51, 71]
+  model_family: drone-rescue-v2
+physics:
+  mass_kg: 2.5

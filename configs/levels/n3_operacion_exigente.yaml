@@ -1,0 +1,10 @@
+# Nivel exigente: conserva N2 y añade viento como única perturbación.
+_extends: n2_mas_decisiones.yaml
+level:
+  id: N3
+  version: 1.0.0
+  model_family: drone-rescue-v2
+  description: N2 con viento horizontal variable por episodio.
+wind:
+  acceleration_min_mps2: [-0.25, -0.25, 0.0]
+  acceleration_max_mps2: [0.25, 0.25, 0.0]

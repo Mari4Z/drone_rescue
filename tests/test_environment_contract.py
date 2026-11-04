@@ -8,7 +8,7 @@ import envs
 from agent.qlearning import QAgent as LegacyQAgent
 from agents.qlearning import QAgent
 from env.drone_env import DroneEnv as LegacyDroneEnv
-from envs.drone_env import DEFAULT_CONFIG_PATH, ENVIRONMENT_VERSION, DroneEnv, discretize_observation
+from envs.drone_env import DEFAULT_CONFIG_PATH, ENVIRONMENT_VERSION, DroneEnv, discretize_observation, load_config
 
 
 def quiet_environment():
@@ -249,3 +249,64 @@ def test_q_learning_discretization_and_legacy_q_agent_api():
     legacy_agent = QAgent(shape=(2,), n_actions=2, alpha=0.5, gamma=0.9, eps=0, seed=0)
     legacy_agent.update((0,), 1, 2.0, (1,), done=True)
     assert np.array_equal(legacy_agent.q[0], [0.0, 1.0])
+
+
+CONFIG_VARIANTS = [
+    "configs/levels/n1_mision_base.yaml",
+    "configs/levels/n2_mas_decisiones.yaml",
+    "configs/levels/n3_operacion_exigente.yaml",
+    "configs/experiments/exp-001.yaml",
+    "configs/experiments/exp-002.yaml",
+    "configs/experiments/exp-003.yaml",
+    "configs/experiments/exp-004.yaml",
+]
+
+
+@pytest.mark.parametrize("config_path", CONFIG_VARIANTS)
+def test_versioned_level_and_experiment_configs_are_executable(config_path):
+    environment = DroneEnv(config_path=config_path)
+    observation, info = environment.reset(seed=2026)
+    assert environment.observation_space.contains(observation)
+    assert environment.action_space.n == 7
+    assert info["stage"] == "outbound"
+
+
+@pytest.mark.parametrize(
+    ("experiment_id", "expected_dimension"),
+    [
+        ("exp-001", "world.obstacles"),
+        ("exp-002", "battery.capacity_wh"),
+        ("exp-003", "wind.acceleration_bounds"),
+        ("exp-004", "physics.mass_kg"),
+    ],
+)
+def test_experiments_declare_one_baseline_dimension(experiment_id, expected_dimension):
+    from pathlib import Path
+
+    experiment_path = Path("configs/experiments") / f"{experiment_id}.yaml"
+    environment = DroneEnv(config_path=experiment_path)
+    experiment = environment.config["experiment"]
+    assert experiment["id"] == experiment_id
+    assert experiment["changed_dimension"] == expected_dimension
+    assert experiment["episode_budget"] == 5000
+    assert len(experiment["seeds"]) == 5
+    assert experiment["model_family"] == "drone-rescue-v2"
+    assert environment.observation_space.shape == (19,)
+    assert environment.action_space.n == 7
+
+    baseline = load_config()
+    changed_sections = {
+        key for key in ("world", "physics", "wind", "battery")
+        if environment.config[key] != baseline[key]
+    }
+    expected_section = expected_dimension.split(".")[0]
+    assert changed_sections == {expected_section}
+    if expected_section == "world":
+        assert {key for key in environment.config["world"] if environment.config["world"][key] != baseline["world"][key]} == {"obstacles"}
+    elif expected_section in {"physics", "battery"}:
+        section = expected_section
+        assert {key for key in environment.config[section] if environment.config[section][key] != baseline[section][key]} == {expected_dimension.split(".")[1]}
+    elif expected_section == "wind":
+        assert {key for key in environment.config["wind"] if environment.config["wind"][key] != baseline["wind"][key]} == {
+            "acceleration_min_mps2", "acceleration_max_mps2"
+        }
