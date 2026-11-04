@@ -5,6 +5,7 @@ import yaml
 
 import env
 import envs
+from pipelines.evaluate import evaluate, load_q_table, load_suite, save_q_table
 from agent.qlearning import QAgent as LegacyQAgent
 from agents.qlearning import QAgent
 from env.drone_env import DroneEnv as LegacyDroneEnv
@@ -310,3 +311,76 @@ def test_experiments_declare_one_baseline_dimension(experiment_id, expected_dime
         assert {key for key in environment.config["wind"] if environment.config["wind"][key] != baseline["wind"][key]} == {
             "acceleration_min_mps2", "acceleration_max_mps2"
         }
+
+
+def test_fixed_evaluation_suite_has_public_seeds_and_three_references():
+    suite, _ = load_suite()
+    assert suite["evaluation_suite_id"] == "drone-rescue-public-validation"
+    assert suite["version"] == "1.0.0"
+    assert suite["split"] == "public_validation"
+    assert suite["episodes_per_level"] == len(suite["seeds"]) == 10
+    assert suite["references"] == ["random", "rule", "q_learning_greedy"]
+
+
+def test_evaluation_writes_case_metrics_without_cross_level_return_aggregation(tmp_path):
+    from pathlib import Path
+
+    config = load_config("configs/levels/n1_mision_base.yaml")
+    config["mission"]["max_steps"] = 12
+    config_path = tmp_path / "short_n1.yaml"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    suite = {
+        "evaluation_suite_id": "test-public-suite",
+        "version": "test-1",
+        "split": "public_validation",
+        "episodes_per_level": 1,
+        "seeds": [42],
+        "levels": [{"id": "N1", "config": str(config_path)}],
+        "references": ["random", "rule", "q_learning_greedy"],
+    }
+    suite_path = tmp_path / "suite.yaml"
+    suite_path.write_text(yaml.safe_dump(suite), encoding="utf-8")
+    q_path = tmp_path / "q_table.npz"
+    np.savez_compressed(q_path, states=np.zeros((1, 16), dtype=np.int64), q_values=np.zeros((1, 7)))
+    assert len(load_q_table(q_path)) == 1
+
+    output = tmp_path / "evaluacion.json"
+    result = evaluate(suite_path, q_path, output)
+
+    assert output.exists()
+    assert len(result["cases"]) == 3
+    assert "mean_return" not in result
+    for case in result["cases"]:
+        assert case["metrics"]["episodes"] == 1
+        assert "success_rate" in case["metrics"] and "mean_return" in case["metrics"]
+        episode = case["episodes"][0]
+        assert set(("success", "cause", "steps", "battery_remaining_wh", "delivery_precision_m",
+                    "delivery_speed_mps", "collisions", "return", "inference_latency_ms")).issubset(episode)
+    with pytest.raises(FileExistsError):
+        evaluate(suite_path, q_path, output)
+
+
+def test_reserved_test_suite_is_rejected(tmp_path):
+    suite = {
+        "evaluation_suite_id": "private-test",
+        "version": "1.0.0",
+        "split": "test_reserved",
+        "episodes_per_level": 1,
+        "seeds": [5],
+        "levels": [],
+        "references": ["random", "rule", "q_learning_greedy"],
+    }
+    path = tmp_path / "reserved.yaml"
+    path.write_text(yaml.safe_dump(suite), encoding="utf-8")
+    with pytest.raises(ValueError, match="public_validation"):
+        load_suite(path)
+
+
+def test_q_table_checkpoint_round_trip(tmp_path):
+    agent = QAgent(n_actions=7, eps=0, seed=1)
+    agent.q[(1,) * 16][4] = 3.0
+    checkpoint = save_q_table(agent, tmp_path / "table.npz")
+    loaded = load_q_table(checkpoint)
+    assert np.array_equal(loaded[(1,) * 16], agent.q[(1,) * 16])
+    with pytest.raises(FileExistsError):
+        save_q_table(agent, checkpoint)
