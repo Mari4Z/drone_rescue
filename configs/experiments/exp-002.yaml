@@ -1,0 +1,11 @@
+_extends: ../drone_rescue.yaml
+experiment:
+  id: exp-002
+  version: 1.0.0
+  hypothesis: "Reducir la capacidad de batería disminuye la tasa de éxito y la reserva al regresar."
+  changed_dimension: battery.capacity_wh
+  episode_budget: 5000
+  seeds: [11, 23, 37, 51, 71]
+  model_family: drone-rescue-v2
+battery:
+  capacity_wh: 22.0

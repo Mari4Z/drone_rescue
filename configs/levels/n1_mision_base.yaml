@@ -1,0 +1,18 @@
+# Nivel inicial: despegar, entregar y regresar con ruta sencilla.
+_extends: ../drone_rescue.yaml
+level:
+  id: N1
+  version: 1.0.0
+  model_family: drone-rescue-v2
+  description: Misión base, sin viento, pocas columnas y batería holgada.
+world:
+  obstacles:
+    - min_m: [25.0, 20.0, 0.0]
+      max_m: [35.0, 30.0, 30.0]
+    - min_m: [65.0, 65.0, 0.0]
+      max_m: [75.0, 75.0, 30.0]
+wind:
+  acceleration_min_mps2: [0.0, 0.0, 0.0]
+  acceleration_max_mps2: [0.0, 0.0, 0.0]
+battery:
+  capacity_wh: 60.0

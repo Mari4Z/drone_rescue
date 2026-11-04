@@ -1,0 +1,12 @@
+_extends: ../drone_rescue.yaml
+experiment:
+  id: exp-003
+  version: 1.0.0
+  hypothesis: "El viento horizontal variable reduce el éxito y aumenta las correcciones de trayectoria."
+  changed_dimension: wind.acceleration_bounds
+  episode_budget: 5000
+  seeds: [11, 23, 37, 51, 71]
+  model_family: drone-rescue-v2
+wind:
+  acceleration_min_mps2: [-0.25, -0.25, 0.0]
+  acceleration_max_mps2: [0.25, 0.25, 0.0]

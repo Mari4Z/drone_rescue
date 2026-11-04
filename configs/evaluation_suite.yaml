@@ -1,0 +1,16 @@
+evaluation_suite_id: drone-rescue-public-validation
+version: 1.0.0
+split: public_validation
+episodes_per_level: 10
+seeds: [101, 211, 307, 401, 503, 601, 701, 809, 907, 1009]
+levels:
+  - id: N1
+    config: configs/levels/n1_mision_base.yaml
+  - id: N2
+    config: configs/levels/n2_mas_decisiones.yaml
+  - id: N3
+    config: configs/levels/n3_operacion_exigente.yaml
+references:
+  - random
+  - rule
+  - q_learning_greedy
