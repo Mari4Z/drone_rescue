@@ -1,7 +1,7 @@
 """Visualización en texto: vista superior y perfil de la ruta, con A y B resaltados."""
 import numpy as np
 
-from env.drone_env import GOAL, NX, NY, NZ, START
+from envs.drone_env import GOAL, NX, NY, NZ, START
 
 A_MARK, B_MARK = "A", "B"
 

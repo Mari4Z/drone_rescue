@@ -8,7 +8,7 @@ if "--show" not in sys.argv:
 import matplotlib.pyplot as plt
 import numpy as np
 
-from env.drone_env import CELL, COLUMNS, GOAL, NX, NY, NZ, START
+from envs.drone_env import CELL, COLUMNS, GOAL, NX, NY, NZ, START
 from train import greedy_path, train
 
 

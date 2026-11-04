@@ -1,3 +1,5 @@
-import gymnasium as gym
+"""Compatibilidad: importa :mod:`envs` para registrar DroneRescue-v0."""
 
-gym.register(id="DroneRescue-v0", entry_point="env.drone_env:DroneEnv")
+from envs import DroneEnv
+
+__all__ = ["DroneEnv"]

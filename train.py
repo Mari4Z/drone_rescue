@@ -2,9 +2,9 @@ from collections import Counter
 
 import gymnasium as gym
 
-import env  # noqa: F401  (registra DroneRescue-v0)
-from agent.qlearning import QAgent
-from env.drone_env import GOAL
+import envs  # noqa: F401  (registra DroneRescue-v0)
+from agents.qlearning import QAgent
+from envs.drone_env import GOAL
 from visualize import show
 
 

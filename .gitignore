@@ -1,2 +1,34 @@
+# Python
 .venv/
+venv/
 __pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Frontend
+node_modules/
+web/dist/
+web/.vite/
+
+# Entornos y secretos
+.env
+.env.*
+!.env.example
+
+# Entrenamientos y resultados locales
+mlruns/
+mlflow.db
+mlflow.db-*
+outputs/
+results/
+logs/
+*.log
+*.tmp
+*.bak
+drone_route*.png
+
+# DVC local
+.dvc/cache/
+.dvc/tmp/
