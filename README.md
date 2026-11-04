@@ -1,8 +1,10 @@
 # Drone Rescue
 
 Proyecto académico de simulación y aprendizaje por refuerzo para una misión de
-rescate con dron. Esta rama conserva el simulador y Q-learning existentes, y
-prepara la estructura para el producto MLOps.
+rescate con dron. El ambiente Gymnasium simula una misión física continua sobre
+un mundo configurado como cuadrícula y Q-learning usa una discretización
+explícita de su observación. La especificación está en
+[`docs/ficha_ambiente.md`](docs/ficha_ambiente.md).
 
 ## Requisitos
 
@@ -59,8 +61,9 @@ la imagen 3D estática:
 python plot3d.py
 ```
 
-La salida `drone_route.png` se escribe en el directorio actual. Para abrir la
-ventana interactiva de Matplotlib:
+Por defecto crea una ruta única dentro de `outputs/`. Si indicas `--out`, la
+ruta debe ser nueva; el programa se niega a sobrescribir una imagen existente.
+Para abrir la ventana interactiva de Matplotlib:
 
 ```bash
 python plot3d.py --show
@@ -97,7 +100,7 @@ No se ha configurado un remoto en esta rama.
 - `env/` y `agent/`: adaptadores para preservar imports históricos.
 - `train.py`: bucle de entrenamiento y recorrido greedy.
 - `visualize.py`, `plot3d.py`: vistas de depuración y visualización estática.
-- `configs/`: reservado para configuración declarativa.
+- `configs/`: configuración YAML efectiva del ambiente y recompensa.
 - `pipelines/`: reservado para orquestación Prefect.
 - `tests/`: pruebas del contrato actual del entorno e imports.
 - `web/`: reservado para Vite, TypeScript, Three.js y Vercel.

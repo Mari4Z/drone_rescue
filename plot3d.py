@@ -1,5 +1,9 @@
-"""Vista 3D de la ruta aprendida. Uso: python plot3d.py [--show]"""
+"""Vista 3D de una ruta física. Uso: python plot3d.py [--show]"""
+
+import argparse
 import sys
+from pathlib import Path
+from uuid import uuid4
 
 import matplotlib
 
@@ -8,45 +12,59 @@ if "--show" not in sys.argv:
 import matplotlib.pyplot as plt
 import numpy as np
 
-from envs.drone_env import CELL, COLUMNS, GOAL, NX, NY, NZ, START
+import envs  # noqa: F401
 from train import greedy_path, train
 
 
-def draw(path, out="drone_route.png"):
+def draw(path, env, out=None, show_window=False):
+    world = env.config["world"]
+    world_size = np.asarray(world["grid_cells"], dtype=np.float64) * float(world["cell_size_m"])
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection="3d")
 
-    for x0, x1, y0, y1, h in COLUMNS:
-        xs, ys = np.array([x0, x1 + 1]) * CELL, np.array([y0, y1 + 1]) * CELL
-        X, Y = np.meshgrid(xs, ys)
-        for z in (0, h):
-            ax.plot_surface(X, Y, np.full_like(X, z, dtype=float), color="tab:gray", alpha=0.6)
-        for x in xs:
-            ax.plot_surface(np.full((2, 2), x), Y, np.array([[0, 0], [h, h]]).T, color="tab:gray", alpha=0.5)
-        for y in ys:
-            ax.plot_surface(X, np.full((2, 2), y), np.array([[0, h], [0, h]]), color="tab:gray", alpha=0.5)
+    for minimum, maximum in env._obstacles:
+        x0, y0, z0 = minimum
+        x1, y1, z1 = maximum
+        for z in (z0, z1):
+            x_grid, y_grid = np.meshgrid([x0, x1], [y0, y1])
+            ax.plot_surface(x_grid, y_grid, np.full_like(x_grid, z), color="tab:gray", alpha=0.35)
+        for x in (x0, x1):
+            y_grid, z_grid = np.meshgrid([y0, y1], [z0, z1])
+            ax.plot_surface(np.full_like(y_grid, x), y_grid, z_grid, color="tab:gray", alpha=0.25)
+        for y in (y0, y1):
+            x_grid, z_grid = np.meshgrid([x0, x1], [z0, z1])
+            ax.plot_surface(x_grid, np.full_like(x_grid, y), z_grid, color="tab:gray", alpha=0.25)
 
-    p = (np.array(path) + 0.5) * CELL
-    ax.plot(p[:, 0], p[:, 1], p[:, 2], color="tab:blue", lw=2.5, label="ruta del dron")
-    a, b = (np.array(START) + 0.5) * CELL, (np.array(GOAL) + 0.5) * CELL
-    ax.scatter(*a, s=250, c="limegreen", edgecolors="k", label="A (inicio)")
-    ax.scatter(*b, s=250, c="red", edgecolors="k", label="B (meta)")
-    ax.text(*(a + [0, 0, 4]), "A", fontsize=14, weight="bold")
-    ax.text(*(b + [0, 0, 4]), "B", fontsize=14, weight="bold")
-
-    ax.set(xlim=(0, NX * CELL), ylim=(0, NY * CELL), zlim=(0, NZ * CELL), xlabel="x (m)", ylabel="y (m)", zlabel="altura (m)")
-    ax.set_box_aspect((1, 1, 0.6))
+    points = np.asarray(path, dtype=np.float64)
+    ax.plot(points[:, 0], points[:, 1], points[:, 2], color="tab:blue", lw=2.5, label="ruta del dron")
+    base = np.asarray(world["base_center_m"], dtype=np.float64)
+    delivery = np.asarray(world["delivery_center_m"], dtype=np.float64)
+    ax.scatter(*base, s=180, c="limegreen", edgecolors="k", label="BASE")
+    ax.scatter(*delivery, s=180, c="red", edgecolors="k", label="zona de entrega")
+    ax.set(xlim=(0, world_size[0]), ylim=(0, world_size[1]), zlim=(0, world_size[2]),
+           xlabel="x (m)", ylabel="y (m)", zlabel="altura (m)")
+    ax.set_box_aspect((world_size[0], world_size[1], world_size[2] * 0.6))
     ax.view_init(elev=28, azim=-55)
     ax.legend(loc="upper left")
-    ax.set_title(f"Drone Rescue: ruta aprendida ({len(path) - 1} pasos)")
+    ax.set_title(f"Drone Rescue: ruta ({len(path) - 1} pasos)")
+    if out is None:
+        out = Path("outputs") / f"drone_route_{uuid4().hex[:8]}.png"
+    out = Path(out)
+    if out.exists():
+        raise FileExistsError(f"La salida ya existe; elige una ruta nueva: {out}")
+    out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=130, bbox_inches="tight")
     print("guardado en", out)
-    if "--show" in sys.argv:
+    if show_window:
         plt.show()
 
 
 if __name__ == "__main__":
-    e, agent, _ = train()
-    path, result = greedy_path(e, agent)
+    parser = argparse.ArgumentParser(description="Visualiza una ruta Drone Rescue")
+    parser.add_argument("--show", action="store_true", help="abre la ventana de Matplotlib")
+    parser.add_argument("--out", type=Path, help="ruta nueva para guardar la imagen")
+    args = parser.parse_args()
+    environment, agent, _ = train()
+    path, result = greedy_path(environment, agent)
     print("resultado:", result)
-    draw(path)
+    draw(path, environment.unwrapped, out=args.out, show_window=args.show)

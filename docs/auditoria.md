@@ -6,9 +6,9 @@ El repositorio no contiene el PDF de requisitos en ninguna de sus ramas
 revisadas. Por ello, este reporte contrasta el código visible y el producto
 final descrito en la solicitud; no puede afirmar cumplimiento literal del PDF.
 
-## Ya existe en la rama `1Experiment`
+## Existía en la rama `1Experiment`
 
-- Entorno Gymnasium discreto 3D, agente tabular Q-learning y entrenamiento.
+- Entorno Gymnasium de posición discreta, agente tabular Q-learning y entrenamiento.
 - Visualización textual y generación de una imagen 3D estática.
 - La dinámica del entorno se mantuvo sin cambios en esta adecuación.
 
@@ -22,6 +22,8 @@ final descrito en la solicitud; no puede afirmar cumplimiento literal del PDF.
   entorno, configuración resuelta, semillas, métricas, commit y run_id.
 - Dependencia MLflow fijada y backend SQLite local de desarrollo configurado;
   la validación de esta adecuación queda registrada como un run.
+- Contrato de misión y dinámica continua en la ficha del ambiente; parámetros de
+  simulación y recompensa en YAML.
 - DVC inicializado con ubicaciones versionadas para Q-tables, suites y
   resultados. Aún no hay artefactos grandes ni remoto DVC configurado.
 - Variables locales de ejemplo sin secretos y reglas de exclusión de archivos

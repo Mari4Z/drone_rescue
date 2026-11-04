@@ -1,0 +1,78 @@
+reward:
+  version: "2.0.0"
+  step_penalty: -0.1
+  progress_per_meter: 0.05
+  pickup_bonus: 10.0
+  delivery_bonus: 30.0
+  return_bonus: 100.0
+  failure_penalty: -100.0
+  invalid_release_penalty: -0.5
+
+world:
+  cell_size_m: 5.0
+  grid_cells: [20, 20, 12]
+  base_center_m: [2.5, 2.5, 0.0]
+  base_radius_m: 3.5
+  base_max_altitude_m: 1.5
+  base_max_speed_mps: 0.75
+  delivery_center_m: [97.5, 97.5, 0.0]
+  delivery_radius_m: 8.0
+  delivery_min_altitude_m: 0.5
+  delivery_max_altitude_m: 4.0
+  delivery_max_speed_mps: 0.75
+  obstacles:
+    - min_m: [20.0, 10.0, 0.0]
+      max_m: [35.0, 25.0, 55.0]
+    - min_m: [50.0, 30.0, 0.0]
+      max_m: [65.0, 45.0, 50.0]
+    - min_m: [15.0, 60.0, 0.0]
+      max_m: [30.0, 75.0, 55.0]
+    - min_m: [70.0, 50.0, 0.0]
+      max_m: [85.0, 65.0, 45.0]
+    - min_m: [45.0, 75.0, 0.0]
+      max_m: [60.0, 90.0, 55.0]
+
+physics:
+  dt_s: 0.5
+  mass_kg: 2.0
+  control_force_n: 4.0
+  max_acceleration_mps2: 3.0
+  linear_drag_kg_per_s: 0.25
+  max_speed_mps: 5.0
+  drone_radius_m: 0.5
+  floor_clearance_m: 0.25
+
+wind:
+  acceleration_min_mps2: [-0.15, -0.15, 0.0]
+  acceleration_max_mps2: [0.15, 0.15, 0.0]
+
+battery:
+  capacity_wh: 30.0
+  idle_power_w: 20.0
+  movement_energy_wh_per_m: 0.01
+
+sensors:
+  range_m: 20.0
+  ray_step_m: 1.0
+
+mission:
+  stages: [outbound, delivery, return, complete]
+  max_steps: 800
+
+actions:
+  movement_directions:
+    - [1, 0, 0]
+    - [-1, 0, 0]
+    - [0, 1, 0]
+    - [0, -1, 0]
+    - [0, 0, 1]
+    - [0, 0, -1]
+  release_index: 6
+
+q_learning:
+  discretization:
+    target_component_step_m: 10.0
+    velocity_component_step_mps: 1.0
+    altitude_step_m: 5.0
+    sensor_step_m: 5.0
+    battery_fraction_bins: 5
