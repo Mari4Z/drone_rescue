@@ -108,8 +108,40 @@ git add artifacts/*.dvc artifacts/.gitignore
 Luego configura un remoto DVC compartido antes de usar `dvc push` o `dvc pull`.
 No se ha configurado un remoto en esta rama.
 
+## API de simulación
+
+La API ejecuta el mismo ambiente Python versionado; no delega transiciones ni
+física al cliente. Con las dependencias instaladas, inicia Uvicorn localmente:
+
+```bash
+python -m api.main
+```
+
+`GET /catalog` combina runs de MLflow con manifiestos locales. `POST /load`
+acepta `{"run_id": "<run_id>"}` y verifica los SHA-256 del modelo, la
+configuración y la normalización antes de activar la Q-table junto con el
+ambiente resuelto original. `POST /evaluate` ejecuta la suite pública fijada
+por `DRONE_RESCUE_EVALUATION_SUITE` y guarda un resultado con nombre único en
+`artifacts/results/`. `POST /episode/reset` inicia un episodio; `GET
+/episode/step?action=4` avanza un paso manual y devuelve posición, telemetría,
+recompensa, causa y modo. Los modos `aleatorio`, `referencia` y `evaluacion`
+también están disponibles; `entrenamiento` y `replay` responden HTTP 501 hasta
+que exista una implementación real. `GET /health` y `GET /version` reportan
+estado y versiones servidas.
+
+Configura `DRONE_RESCUE_CORS_ORIGINS` como lista separada por comas. En
+producción define `DRONE_RESCUE_ENV=production`,
+`DRONE_RESCUE_SSL_CERTFILE` y `DRONE_RESCUE_SSL_KEYFILE`; Uvicorn termina TLS
+directamente y la aplicación rechaza solicitudes que no usen HTTPS. Los
+orígenes CORS de producción también deben usar HTTPS. `MLFLOW_UI_URL` permite
+configurar un enlace navegable al UI; sin un UI HTTP(S), el catálogo devuelve
+`mlflow_link: null` y reporta por separado el URI de tracking y el URI del run.
+La API solo puede cargar runs cuyos artefactos MLflow y manifiestos sean
+accesibles desde el servidor.
+
 ## Arquitectura
 
+- `api/main.py`: API FastAPI/Uvicorn para catálogo, carga, evaluación y pasos.
 - `envs/`: entorno Gymnasium canónico y reglas físicas de la simulación.
 - `agents/`: agente Q-learning tabular.
 - `env/` y `agent/`: adaptadores para preservar imports históricos.
@@ -131,7 +163,7 @@ velocidad de animación no modificará el paso físico.
 ## Pruebas
 
 ```bash
-pytest
+python -m pytest
 ```
 
 ## Estado frente al producto final
