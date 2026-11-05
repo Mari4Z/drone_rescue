@@ -1,0 +1,2419 @@
+{
+  "comparison_id": "finalistas-20261105T151229Z",
+  "created_at_utc": "2026-11-05T16:54:57.602922+00:00",
+  "selection_policy": [
+    "success_rate desc",
+    "catastrophic_failure_rate asc",
+    "mean_steps asc",
+    "battery_remaining desc",
+    "inference_latency asc",
+    "candidate_id asc"
+  ],
+  "evaluation_suite_id": "drone-rescue-finalists-public",
+  "evaluation_suite_version": "1.0.0",
+  "evaluation_suite_path": "configs/finalist_evaluation_suite.yaml",
+  "evaluation_suite_sha256": "2fb8ee004fe8185fc1288f504eec4b61f9cd9855355f0d5c534edc4819e8d124",
+  "evaluation_seeds": [
+    101,
+    211,
+    307,
+    401,
+    503,
+    601,
+    701,
+    809,
+    907,
+    1009
+  ],
+  "evaluation_episode_count": 10,
+  "evaluation_case_count": 4,
+  "reward_version": "2.0.0",
+  "screening_seed": 7001,
+  "screening_budget": 500,
+  "final_training_budget": 5000,
+  "training_seeds": [
+    11,
+    23,
+    37
+  ],
+  "screening": {
+    "candidates": [
+      {
+        "candidate_id": "exp-001",
+        "config_path": "configs/experiments/exp-001.yaml",
+        "hypothesis": "Aumentar columnas incrementa las colisiones y el tiempo de ruta frente al baseline.",
+        "screening_seed": 7001,
+        "screening_budget": 500,
+        "screening_run_id": "f60c92943c6b496588603a02fb10190f",
+        "screening_registry_uri": "models:/DroneRescueQTable-exp-001/1",
+        "screening_metrics": {
+          "episodes": 10,
+          "reward_version": "2.0.0",
+          "success_count": 0,
+          "success_rate": 0.0,
+          "cause_counts": {
+            "collision": 3,
+            "out_of_bounds": 7
+          },
+          "mean_return": -90.31164958757769,
+          "mean_steps": 4.1,
+          "mean_battery_remaining_wh": 29.952735828643036,
+          "mean_delivery_precision_m": null,
+          "mean_delivery_speed_mps": null,
+          "total_collisions": 3,
+          "mean_inference_latency_ms": 0.052583500000764616,
+          "mean_total_inference_latency_ms": 0.21539000000529995
+        },
+        "common_suite_metrics": {
+          "exp-001": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 3,
+              "out_of_bounds": 7
+            },
+            "mean_return": -90.31164958757769,
+            "mean_steps": 4.1,
+            "mean_battery_remaining_wh": 29.952735828643036,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 3,
+            "mean_inference_latency_ms": 0.052583500000764616,
+            "mean_total_inference_latency_ms": 0.21539000000529995
+          },
+          "exp-002": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 3,
+              "out_of_bounds": 7
+            },
+            "mean_return": -90.31164958757769,
+            "mean_steps": 4.1,
+            "mean_battery_remaining_wh": 21.95273582864304,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 3,
+            "mean_inference_latency_ms": 0.04538899999715795,
+            "mean_total_inference_latency_ms": 0.1869699999929253
+          },
+          "exp-003": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 5,
+              "out_of_bounds": 5
+            },
+            "mean_return": -90.31649485730571,
+            "mean_steps": 4.2,
+            "mean_battery_remaining_wh": 29.9505651308263,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 5,
+            "mean_inference_latency_ms": 0.14647057000161112,
+            "mean_total_inference_latency_ms": 0.5990603000100236
+          },
+          "exp-004": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 7,
+              "out_of_bounds": 3
+            },
+            "mean_return": -90.37886953133601,
+            "mean_steps": 5.1,
+            "mean_battery_remaining_wh": 29.9450211533699,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 7,
+            "mean_inference_latency_ms": 0.07078268667214616,
+            "mean_total_inference_latency_ms": 0.36730010002656854
+          }
+        },
+        "screening_manifest": "manifests/f60c92943c6b496588603a02fb10190f.json"
+      },
+      {
+        "candidate_id": "exp-002",
+        "config_path": "configs/experiments/exp-002.yaml",
+        "hypothesis": "Reducir la capacidad de batería disminuye la tasa de éxito y la reserva al regresar.",
+        "screening_seed": 7001,
+        "screening_budget": 500,
+        "screening_run_id": "ffb5dc085a654049b1347611db54b568",
+        "screening_registry_uri": "models:/DroneRescueQTable-exp-002/1",
+        "screening_metrics": {
+          "episodes": 10,
+          "reward_version": "2.0.0",
+          "success_count": 0,
+          "success_rate": 0.0,
+          "cause_counts": {
+            "collision": 10
+          },
+          "mean_return": -90.3617294064387,
+          "mean_steps": 4.6,
+          "mean_battery_remaining_wh": 21.942031994374222,
+          "mean_delivery_precision_m": null,
+          "mean_delivery_speed_mps": null,
+          "total_collisions": 10,
+          "mean_inference_latency_ms": 0.05783916666549279,
+          "mean_total_inference_latency_ms": 0.2558699999894998
+        },
+        "common_suite_metrics": {
+          "exp-001": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 10
+            },
+            "mean_return": -90.3617294064387,
+            "mean_steps": 4.6,
+            "mean_battery_remaining_wh": 29.942031994374226,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 10,
+            "mean_inference_latency_ms": 0.06187166665701701,
+            "mean_total_inference_latency_ms": 0.2707099999611273
+          },
+          "exp-002": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 10
+            },
+            "mean_return": -90.3617294064387,
+            "mean_steps": 4.6,
+            "mean_battery_remaining_wh": 21.942031994374222,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 10,
+            "mean_inference_latency_ms": 0.05783916666549279,
+            "mean_total_inference_latency_ms": 0.2558699999894998
+          },
+          "exp-003": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 10
+            },
+            "mean_return": -90.37720228376396,
+            "mean_steps": 4.8,
+            "mean_battery_remaining_wh": 29.94144145291123,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 10,
+            "mean_inference_latency_ms": 0.058270025006379456,
+            "mean_total_inference_latency_ms": 0.2730201000304078
+          },
+          "exp-004": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 10
+            },
+            "mean_return": -90.35258435009415,
+            "mean_steps": 4.4,
+            "mean_battery_remaining_wh": 29.94599465458907,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 10,
+            "mean_inference_latency_ms": 0.056441999994945036,
+            "mean_total_inference_latency_ms": 0.2502399999798399
+          }
+        },
+        "screening_manifest": "manifests/ffb5dc085a654049b1347611db54b568.json"
+      },
+      {
+        "candidate_id": "exp-003",
+        "config_path": "configs/experiments/exp-003.yaml",
+        "hypothesis": "El viento horizontal variable reduce el éxito y aumenta las correcciones de trayectoria.",
+        "screening_seed": 7001,
+        "screening_budget": 500,
+        "screening_run_id": "d21f0d0528d74cb6b107217230ac0d13",
+        "screening_registry_uri": "models:/DroneRescueQTable-exp-003/1",
+        "screening_metrics": {
+          "episodes": 10,
+          "reward_version": "2.0.0",
+          "success_count": 0,
+          "success_rate": 0.0,
+          "cause_counts": {
+            "collision": 9,
+            "out_of_bounds": 1
+          },
+          "mean_return": -90.4260618969524,
+          "mean_steps": 5.6,
+          "mean_battery_remaining_wh": 29.93838170051785,
+          "mean_delivery_precision_m": null,
+          "mean_delivery_speed_mps": null,
+          "total_collisions": 9,
+          "mean_inference_latency_ms": 0.05413708582957659,
+          "mean_total_inference_latency_ms": 0.3158118999749604
+        },
+        "common_suite_metrics": {
+          "exp-001": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 9,
+              "out_of_bounds": 1
+            },
+            "mean_return": -90.43584730560217,
+            "mean_steps": 5.7,
+            "mean_battery_remaining_wh": 29.935100261698814,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 9,
+            "mean_inference_latency_ms": 0.08302611142056548,
+            "mean_total_inference_latency_ms": 0.45901019996108516
+          },
+          "exp-002": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 9,
+              "out_of_bounds": 1
+            },
+            "mean_return": -90.43584730560217,
+            "mean_steps": 5.7,
+            "mean_battery_remaining_wh": 21.935100261698814,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 9,
+            "mean_inference_latency_ms": 0.07288501999093049,
+            "mean_total_inference_latency_ms": 0.40469009994694716
+          },
+          "exp-003": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 9,
+              "out_of_bounds": 1
+            },
+            "mean_return": -90.4260618969524,
+            "mean_steps": 5.6,
+            "mean_battery_remaining_wh": 29.93838170051785,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 9,
+            "mean_inference_latency_ms": 0.05413708582957659,
+            "mean_total_inference_latency_ms": 0.3158118999749604
+          },
+          "exp-004": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 10
+            },
+            "mean_return": -90.53976968231505,
+            "mean_steps": 6.8,
+            "mean_battery_remaining_wh": 29.935596564563753,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 10,
+            "mean_inference_latency_ms": 0.049646280864881945,
+            "mean_total_inference_latency_ms": 0.33496299995476875
+          }
+        },
+        "screening_manifest": "manifests/d21f0d0528d74cb6b107217230ac0d13.json"
+      },
+      {
+        "candidate_id": "exp-004",
+        "config_path": "configs/experiments/exp-004.yaml",
+        "hypothesis": "Aumentar la masa reduce la aceleración disponible y alarga las misiones exitosas.",
+        "screening_seed": 7001,
+        "screening_budget": 500,
+        "screening_run_id": "d4d0c204a8ef4a7e9ba0dd0c79e1333e",
+        "screening_registry_uri": "models:/DroneRescueQTable-exp-004/1",
+        "screening_metrics": {
+          "episodes": 10,
+          "reward_version": "2.0.0",
+          "success_count": 0,
+          "success_rate": 0.0,
+          "cause_counts": {
+            "collision": 4,
+            "out_of_bounds": 6
+          },
+          "mean_return": -91.24235312544923,
+          "mean_steps": 21.3,
+          "mean_battery_remaining_wh": 29.511349703576535,
+          "mean_delivery_precision_m": null,
+          "mean_delivery_speed_mps": null,
+          "total_collisions": 4,
+          "mean_inference_latency_ms": 0.06126894612399646,
+          "mean_total_inference_latency_ms": 1.2518064999767375
+        },
+        "common_suite_metrics": {
+          "exp-001": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 7,
+              "out_of_bounds": 3
+            },
+            "mean_return": -90.86280145840225,
+            "mean_steps": 14.6,
+            "mean_battery_remaining_wh": 29.684243085720492,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 7,
+            "mean_inference_latency_ms": 0.06289956690119011,
+            "mean_total_inference_latency_ms": 0.9519585002408348
+          },
+          "exp-002": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 7,
+              "out_of_bounds": 3
+            },
+            "mean_return": -90.86280145840225,
+            "mean_steps": 14.6,
+            "mean_battery_remaining_wh": 21.684243085720492,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 7,
+            "mean_inference_latency_ms": 0.05170213773716555,
+            "mean_total_inference_latency_ms": 0.7392486998014647
+          },
+          "exp-003": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 7,
+              "out_of_bounds": 3
+            },
+            "mean_return": -90.61972715670848,
+            "mean_steps": 10.7,
+            "mean_battery_remaining_wh": 29.783451652915527,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 7,
+            "mean_inference_latency_ms": 0.04451140026063754,
+            "mean_total_inference_latency_ms": 0.4868045999728565
+          },
+          "exp-004": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 4,
+              "out_of_bounds": 6
+            },
+            "mean_return": -91.24235312544923,
+            "mean_steps": 21.3,
+            "mean_battery_remaining_wh": 29.511349703576535,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 4,
+            "mean_inference_latency_ms": 0.06126894612399646,
+            "mean_total_inference_latency_ms": 1.2518064999767375
+          }
+        },
+        "screening_manifest": "manifests/d4d0c204a8ef4a7e9ba0dd0c79e1333e.json"
+      }
+    ],
+    "ranking": [
+      {
+        "candidate_id": "exp-001",
+        "config_path": "configs/experiments/exp-001.yaml",
+        "hypothesis": "Aumentar columnas incrementa las colisiones y el tiempo de ruta frente al baseline.",
+        "screening_seed": 7001,
+        "screening_budget": 500,
+        "screening_run_id": "f60c92943c6b496588603a02fb10190f",
+        "screening_registry_uri": "models:/DroneRescueQTable-exp-001/1",
+        "screening_metrics": {
+          "episodes": 10,
+          "reward_version": "2.0.0",
+          "success_count": 0,
+          "success_rate": 0.0,
+          "cause_counts": {
+            "collision": 3,
+            "out_of_bounds": 7
+          },
+          "mean_return": -90.31164958757769,
+          "mean_steps": 4.1,
+          "mean_battery_remaining_wh": 29.952735828643036,
+          "mean_delivery_precision_m": null,
+          "mean_delivery_speed_mps": null,
+          "total_collisions": 3,
+          "mean_inference_latency_ms": 0.052583500000764616,
+          "mean_total_inference_latency_ms": 0.21539000000529995
+        },
+        "common_suite_metrics": {
+          "exp-001": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 3,
+              "out_of_bounds": 7
+            },
+            "mean_return": -90.31164958757769,
+            "mean_steps": 4.1,
+            "mean_battery_remaining_wh": 29.952735828643036,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 3,
+            "mean_inference_latency_ms": 0.052583500000764616,
+            "mean_total_inference_latency_ms": 0.21539000000529995
+          },
+          "exp-002": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 3,
+              "out_of_bounds": 7
+            },
+            "mean_return": -90.31164958757769,
+            "mean_steps": 4.1,
+            "mean_battery_remaining_wh": 21.95273582864304,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 3,
+            "mean_inference_latency_ms": 0.04538899999715795,
+            "mean_total_inference_latency_ms": 0.1869699999929253
+          },
+          "exp-003": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 5,
+              "out_of_bounds": 5
+            },
+            "mean_return": -90.31649485730571,
+            "mean_steps": 4.2,
+            "mean_battery_remaining_wh": 29.9505651308263,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 5,
+            "mean_inference_latency_ms": 0.14647057000161112,
+            "mean_total_inference_latency_ms": 0.5990603000100236
+          },
+          "exp-004": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 7,
+              "out_of_bounds": 3
+            },
+            "mean_return": -90.37886953133601,
+            "mean_steps": 5.1,
+            "mean_battery_remaining_wh": 29.9450211533699,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 7,
+            "mean_inference_latency_ms": 0.07078268667214616,
+            "mean_total_inference_latency_ms": 0.36730010002656854
+          }
+        },
+        "screening_manifest": "manifests/f60c92943c6b496588603a02fb10190f.json"
+      },
+      {
+        "candidate_id": "exp-002",
+        "config_path": "configs/experiments/exp-002.yaml",
+        "hypothesis": "Reducir la capacidad de batería disminuye la tasa de éxito y la reserva al regresar.",
+        "screening_seed": 7001,
+        "screening_budget": 500,
+        "screening_run_id": "ffb5dc085a654049b1347611db54b568",
+        "screening_registry_uri": "models:/DroneRescueQTable-exp-002/1",
+        "screening_metrics": {
+          "episodes": 10,
+          "reward_version": "2.0.0",
+          "success_count": 0,
+          "success_rate": 0.0,
+          "cause_counts": {
+            "collision": 10
+          },
+          "mean_return": -90.3617294064387,
+          "mean_steps": 4.6,
+          "mean_battery_remaining_wh": 21.942031994374222,
+          "mean_delivery_precision_m": null,
+          "mean_delivery_speed_mps": null,
+          "total_collisions": 10,
+          "mean_inference_latency_ms": 0.05783916666549279,
+          "mean_total_inference_latency_ms": 0.2558699999894998
+        },
+        "common_suite_metrics": {
+          "exp-001": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 10
+            },
+            "mean_return": -90.3617294064387,
+            "mean_steps": 4.6,
+            "mean_battery_remaining_wh": 29.942031994374226,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 10,
+            "mean_inference_latency_ms": 0.06187166665701701,
+            "mean_total_inference_latency_ms": 0.2707099999611273
+          },
+          "exp-002": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 10
+            },
+            "mean_return": -90.3617294064387,
+            "mean_steps": 4.6,
+            "mean_battery_remaining_wh": 21.942031994374222,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 10,
+            "mean_inference_latency_ms": 0.05783916666549279,
+            "mean_total_inference_latency_ms": 0.2558699999894998
+          },
+          "exp-003": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 10
+            },
+            "mean_return": -90.37720228376396,
+            "mean_steps": 4.8,
+            "mean_battery_remaining_wh": 29.94144145291123,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 10,
+            "mean_inference_latency_ms": 0.058270025006379456,
+            "mean_total_inference_latency_ms": 0.2730201000304078
+          },
+          "exp-004": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 10
+            },
+            "mean_return": -90.35258435009415,
+            "mean_steps": 4.4,
+            "mean_battery_remaining_wh": 29.94599465458907,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 10,
+            "mean_inference_latency_ms": 0.056441999994945036,
+            "mean_total_inference_latency_ms": 0.2502399999798399
+          }
+        },
+        "screening_manifest": "manifests/ffb5dc085a654049b1347611db54b568.json"
+      },
+      {
+        "candidate_id": "exp-003",
+        "config_path": "configs/experiments/exp-003.yaml",
+        "hypothesis": "El viento horizontal variable reduce el éxito y aumenta las correcciones de trayectoria.",
+        "screening_seed": 7001,
+        "screening_budget": 500,
+        "screening_run_id": "d21f0d0528d74cb6b107217230ac0d13",
+        "screening_registry_uri": "models:/DroneRescueQTable-exp-003/1",
+        "screening_metrics": {
+          "episodes": 10,
+          "reward_version": "2.0.0",
+          "success_count": 0,
+          "success_rate": 0.0,
+          "cause_counts": {
+            "collision": 9,
+            "out_of_bounds": 1
+          },
+          "mean_return": -90.4260618969524,
+          "mean_steps": 5.6,
+          "mean_battery_remaining_wh": 29.93838170051785,
+          "mean_delivery_precision_m": null,
+          "mean_delivery_speed_mps": null,
+          "total_collisions": 9,
+          "mean_inference_latency_ms": 0.05413708582957659,
+          "mean_total_inference_latency_ms": 0.3158118999749604
+        },
+        "common_suite_metrics": {
+          "exp-001": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 9,
+              "out_of_bounds": 1
+            },
+            "mean_return": -90.43584730560217,
+            "mean_steps": 5.7,
+            "mean_battery_remaining_wh": 29.935100261698814,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 9,
+            "mean_inference_latency_ms": 0.08302611142056548,
+            "mean_total_inference_latency_ms": 0.45901019996108516
+          },
+          "exp-002": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 9,
+              "out_of_bounds": 1
+            },
+            "mean_return": -90.43584730560217,
+            "mean_steps": 5.7,
+            "mean_battery_remaining_wh": 21.935100261698814,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 9,
+            "mean_inference_latency_ms": 0.07288501999093049,
+            "mean_total_inference_latency_ms": 0.40469009994694716
+          },
+          "exp-003": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 9,
+              "out_of_bounds": 1
+            },
+            "mean_return": -90.4260618969524,
+            "mean_steps": 5.6,
+            "mean_battery_remaining_wh": 29.93838170051785,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 9,
+            "mean_inference_latency_ms": 0.05413708582957659,
+            "mean_total_inference_latency_ms": 0.3158118999749604
+          },
+          "exp-004": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 10
+            },
+            "mean_return": -90.53976968231505,
+            "mean_steps": 6.8,
+            "mean_battery_remaining_wh": 29.935596564563753,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 10,
+            "mean_inference_latency_ms": 0.049646280864881945,
+            "mean_total_inference_latency_ms": 0.33496299995476875
+          }
+        },
+        "screening_manifest": "manifests/d21f0d0528d74cb6b107217230ac0d13.json"
+      },
+      {
+        "candidate_id": "exp-004",
+        "config_path": "configs/experiments/exp-004.yaml",
+        "hypothesis": "Aumentar la masa reduce la aceleración disponible y alarga las misiones exitosas.",
+        "screening_seed": 7001,
+        "screening_budget": 500,
+        "screening_run_id": "d4d0c204a8ef4a7e9ba0dd0c79e1333e",
+        "screening_registry_uri": "models:/DroneRescueQTable-exp-004/1",
+        "screening_metrics": {
+          "episodes": 10,
+          "reward_version": "2.0.0",
+          "success_count": 0,
+          "success_rate": 0.0,
+          "cause_counts": {
+            "collision": 4,
+            "out_of_bounds": 6
+          },
+          "mean_return": -91.24235312544923,
+          "mean_steps": 21.3,
+          "mean_battery_remaining_wh": 29.511349703576535,
+          "mean_delivery_precision_m": null,
+          "mean_delivery_speed_mps": null,
+          "total_collisions": 4,
+          "mean_inference_latency_ms": 0.06126894612399646,
+          "mean_total_inference_latency_ms": 1.2518064999767375
+        },
+        "common_suite_metrics": {
+          "exp-001": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 7,
+              "out_of_bounds": 3
+            },
+            "mean_return": -90.86280145840225,
+            "mean_steps": 14.6,
+            "mean_battery_remaining_wh": 29.684243085720492,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 7,
+            "mean_inference_latency_ms": 0.06289956690119011,
+            "mean_total_inference_latency_ms": 0.9519585002408348
+          },
+          "exp-002": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 7,
+              "out_of_bounds": 3
+            },
+            "mean_return": -90.86280145840225,
+            "mean_steps": 14.6,
+            "mean_battery_remaining_wh": 21.684243085720492,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 7,
+            "mean_inference_latency_ms": 0.05170213773716555,
+            "mean_total_inference_latency_ms": 0.7392486998014647
+          },
+          "exp-003": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 7,
+              "out_of_bounds": 3
+            },
+            "mean_return": -90.61972715670848,
+            "mean_steps": 10.7,
+            "mean_battery_remaining_wh": 29.783451652915527,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 7,
+            "mean_inference_latency_ms": 0.04451140026063754,
+            "mean_total_inference_latency_ms": 0.4868045999728565
+          },
+          "exp-004": {
+            "episodes": 10,
+            "reward_version": "2.0.0",
+            "success_count": 0,
+            "success_rate": 0.0,
+            "cause_counts": {
+              "collision": 4,
+              "out_of_bounds": 6
+            },
+            "mean_return": -91.24235312544923,
+            "mean_steps": 21.3,
+            "mean_battery_remaining_wh": 29.511349703576535,
+            "mean_delivery_precision_m": null,
+            "mean_delivery_speed_mps": null,
+            "total_collisions": 4,
+            "mean_inference_latency_ms": 0.06126894612399646,
+            "mean_total_inference_latency_ms": 1.2518064999767375
+          }
+        },
+        "screening_manifest": "manifests/d4d0c204a8ef4a7e9ba0dd0c79e1333e.json"
+      }
+    ],
+    "selected_finalists": [
+      "exp-001",
+      "exp-002"
+    ],
+    "rejected_candidates": [
+      "exp-003",
+      "exp-004"
+    ]
+  },
+  "finalists": {
+    "exp-001": {
+      "training_seeds": [
+        11,
+        23,
+        37
+      ],
+      "training_seed_count": 3,
+      "evaluation_episode_count_per_model": 40,
+      "metrics": {
+        "success_rate": {
+          "between_training_seeds": {
+            "mean": 0.0,
+            "std": 0.0,
+            "n": 3,
+            "per_seed": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "within_evaluation_episodes": {
+            "mean_std": 0.0,
+            "per_training_seed_std": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "episodes_per_model": 40
+          }
+        },
+        "steps": {
+          "between_training_seeds": {
+            "mean": 92.27499999999999,
+            "std": 105.08657145420628,
+            "n": 3,
+            "per_seed": [
+              27.525,
+              213.525,
+              35.775
+            ]
+          },
+          "within_evaluation_episodes": {
+            "mean_std": 159.31586315023313,
+            "per_training_seed_std": [
+              10.756006074127454,
+              342.9910657055751,
+              124.20051767099682
+            ],
+            "episodes_per_model": 40
+          }
+        },
+        "battery_remaining_wh": {
+          "between_training_seeds": {
+            "mean": 27.360706856457853,
+            "std": 0.2547430020967784,
+            "n": 3,
+            "per_seed": [
+              27.353123400751223,
+              27.10984025337158,
+              27.619156915250763
+            ]
+          },
+          "within_evaluation_episodes": {
+            "mean_std": 3.5917363211040865,
+            "per_training_seed_std": [
+              3.497098841162766,
+              3.81426856830511,
+              3.463841553844383
+            ],
+            "episodes_per_model": 40
+          }
+        },
+        "inference_latency_ms": {
+          "between_training_seeds": {
+            "mean": 0.1245178795407017,
+            "std": 0.050962483308478204,
+            "n": 3,
+            "per_seed": [
+              0.06841937194260303,
+              0.16795845521009306,
+              0.137175811469409
+            ]
+          },
+          "within_evaluation_episodes": {
+            "mean_std": 0.05524751498368225,
+            "per_training_seed_std": [
+              0.020155998218265178,
+              0.09506181381021417,
+              0.05052473292256742
+            ],
+            "episodes_per_model": 40
+          }
+        },
+        "failure:collision": {
+          "between_training_seeds": {
+            "mean": 0.85,
+            "std": 0.10897247358851687,
+            "n": 3,
+            "per_seed": [
+              0.9,
+              0.725,
+              0.925
+            ]
+          },
+          "within_evaluation_episodes": {
+            "mean_std": 0.3409237265794404,
+            "per_training_seed_std": [
+              0.3038218101251,
+              0.45220258677630265,
+              0.2667467828369185
+            ],
+            "episodes_per_model": 40
+          }
+        },
+        "failure:out_of_bounds": {
+          "between_training_seeds": {
+            "mean": 0.05833333333333333,
+            "std": 0.03818813079129867,
+            "n": 3,
+            "per_seed": [
+              0.1,
+              0.025,
+              0.05
+            ]
+          },
+          "within_evaluation_episodes": {
+            "mean_std": 0.22755237366555706,
+            "per_training_seed_std": [
+              0.3038218101251,
+              0.15811388300841897,
+              0.22072142786315221
+            ],
+            "episodes_per_model": 40
+          }
+        },
+        "failure:step_limit": {
+          "between_training_seeds": {
+            "mean": 0.09166666666666667,
+            "std": 0.13768926368215256,
+            "n": 3,
+            "per_seed": [
+              0.0,
+              0.25,
+              0.025
+            ]
+          },
+          "within_evaluation_episodes": {
+            "mean_std": 0.19888096422064452,
+            "per_training_seed_std": [
+              0.0,
+              0.4385290096535146,
+              0.15811388300841897
+            ],
+            "episodes_per_model": 40
+          }
+        }
+      },
+      "by_evaluation_case": {
+        "exp-001": {
+          "success_rate": {
+            "between_training_seeds": {
+              "mean": 0.0,
+              "std": 0.0,
+              "n": 3,
+              "per_seed": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.0,
+              "per_training_seed_std": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "steps": {
+            "between_training_seeds": {
+              "mean": 76.39999999999999,
+              "std": 40.92713036605425,
+              "n": 3,
+              "per_seed": [
+                29.3,
+                96.6,
+                103.3
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 168.48326861874492,
+              "per_training_seed_std": [
+                12.927576038152791,
+                247.43582781983875,
+                245.08640199824316
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "battery_remaining_wh": {
+            "between_training_seeds": {
+              "mean": 29.302161292736713,
+              "std": 0.09303967106530284,
+              "n": 3,
+              "per_seed": [
+                29.304990780609643,
+                29.393753945768033,
+                29.20773915183247
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.5762039450566355,
+              "per_training_seed_std": [
+                0.35360450436646756,
+                0.7158929383992446,
+                0.6591143924041941
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "inference_latency_ms": {
+            "between_training_seeds": {
+              "mean": 0.15423557365347007,
+              "std": 0.07664288449722059,
+              "n": 3,
+              "per_seed": [
+                0.07881014139452718,
+                0.23204049439266594,
+                0.15185608517321705
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.07034032490944848,
+              "per_training_seed_std": [
+                0.028730129951066996,
+                0.16641100082924987,
+                0.015879843948028573
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:collision": {
+            "between_training_seeds": {
+              "mean": 0.8000000000000002,
+              "std": 0.10000000000000003,
+              "n": 3,
+              "per_seed": [
+                0.9,
+                0.8,
+                0.7
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.4069702263040899,
+              "per_training_seed_std": [
+                0.31622776601683794,
+                0.4216370213557839,
+                0.4830458915396479
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:out_of_bounds": {
+            "between_training_seeds": {
+              "mean": 0.13333333333333333,
+              "std": 0.05773502691896258,
+              "n": 3,
+              "per_seed": [
+                0.1,
+                0.1,
+                0.2
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.35136418446315326,
+              "per_training_seed_std": [
+                0.31622776601683794,
+                0.31622776601683794,
+                0.42163702135578396
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:step_limit": {
+            "between_training_seeds": {
+              "mean": 0.06666666666666667,
+              "std": 0.05773502691896258,
+              "n": 3,
+              "per_seed": [
+                0.0,
+                0.1,
+                0.1
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.21081851067789195,
+              "per_training_seed_std": [
+                0.0,
+                0.31622776601683794,
+                0.31622776601683794
+              ],
+              "episodes_per_model": 10
+            }
+          }
+        },
+        "exp-002": {
+          "success_rate": {
+            "between_training_seeds": {
+              "mean": 0.0,
+              "std": 0.0,
+              "n": 3,
+              "per_seed": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.0,
+              "per_training_seed_std": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "steps": {
+            "between_training_seeds": {
+              "mean": 123.73333333333333,
+              "std": 180.63710397737594,
+              "n": 3,
+              "per_seed": [
+                25.5,
+                332.2,
+                13.5
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 137.3841030878225,
+              "per_training_seed_std": [
+                7.412451985979028,
+                402.67157833649,
+                2.068278940998476
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "battery_remaining_wh": {
+            "between_training_seeds": {
+              "mean": 21.297887479874202,
+              "std": 0.4907619373028567,
+              "n": 3,
+              "per_seed": [
+                21.393107959989038,
+                20.766493120368573,
+                21.734061359264988
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.42236440358185545,
+              "per_training_seed_std": [
+                0.2089189295495725,
+                1.0257293657830842,
+                0.03244491541290962
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "inference_latency_ms": {
+            "between_training_seeds": {
+              "mean": 0.09810434488494084,
+              "std": 0.036547571800769715,
+              "n": 3,
+              "per_seed": [
+                0.05689976017195738,
+                0.12660357674388195,
+                0.11080969773898316
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.02068451044580456,
+              "per_training_seed_std": [
+                0.00701362155531523,
+                0.02908507677577551,
+                0.02595483300632293
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:collision": {
+            "between_training_seeds": {
+              "mean": 0.8333333333333334,
+              "std": 0.2081665999466133,
+              "n": 3,
+              "per_seed": [
+                0.9,
+                0.6,
+                1.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.27754184850372005,
+              "per_training_seed_std": [
+                0.31622776601683794,
+                0.5163977794943223,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:out_of_bounds": {
+            "between_training_seeds": {
+              "mean": 0.03333333333333333,
+              "std": 0.05773502691896259,
+              "n": 3,
+              "per_seed": [
+                0.1,
+                0.0,
+                0.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.10540925533894598,
+              "per_training_seed_std": [
+                0.31622776601683794,
+                0.0,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:step_limit": {
+            "between_training_seeds": {
+              "mean": 0.13333333333333333,
+              "std": 0.23094010767585035,
+              "n": 3,
+              "per_seed": [
+                0.0,
+                0.4,
+                0.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.1721325931647741,
+              "per_training_seed_std": [
+                0.0,
+                0.5163977794943223,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          }
+        },
+        "exp-003": {
+          "success_rate": {
+            "between_training_seeds": {
+              "mean": 0.0,
+              "std": 0.0,
+              "n": 3,
+              "per_seed": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.0,
+              "per_training_seed_std": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "steps": {
+            "between_training_seeds": {
+              "mean": 45.300000000000004,
+              "std": 44.95208560233885,
+              "n": 3,
+              "per_seed": [
+                26.5,
+                96.6,
+                12.8
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 86.43581604490315,
+              "per_training_seed_std": [
+                9.571369343574153,
+                247.20625666300057,
+                2.5298221281347035
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "battery_remaining_wh": {
+            "between_training_seeds": {
+              "mean": 29.509864120476863,
+              "std": 0.20631611136194014,
+              "n": 3,
+              "per_seed": [
+                29.369590207388267,
+                29.41324149022741,
+                29.74676066381491
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.32617220012128606,
+              "per_training_seed_std": [
+                0.26233834650019433,
+                0.6499429626500755,
+                0.06623529121358837
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "inference_latency_ms": {
+            "between_training_seeds": {
+              "mean": 0.1209648660943969,
+              "std": 0.05701617313223952,
+              "n": 3,
+              "per_seed": [
+                0.059219964185808036,
+                0.13205047003180742,
+                0.1716241640655752
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.043473705472400065,
+              "per_training_seed_std": [
+                0.013729168798803081,
+                0.033713303458160614,
+                0.0829786441602365
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:collision": {
+            "between_training_seeds": {
+              "mean": 0.9333333333333332,
+              "std": 0.05773502691896257,
+              "n": 3,
+              "per_seed": [
+                0.9,
+                0.9,
+                1.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.21081851067789195,
+              "per_training_seed_std": [
+                0.31622776601683794,
+                0.31622776601683794,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:out_of_bounds": {
+            "between_training_seeds": {
+              "mean": 0.03333333333333333,
+              "std": 0.05773502691896259,
+              "n": 3,
+              "per_seed": [
+                0.1,
+                0.0,
+                0.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.10540925533894598,
+              "per_training_seed_std": [
+                0.31622776601683794,
+                0.0,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:step_limit": {
+            "between_training_seeds": {
+              "mean": 0.03333333333333333,
+              "std": 0.05773502691896259,
+              "n": 3,
+              "per_seed": [
+                0.0,
+                0.1,
+                0.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.10540925533894598,
+              "per_training_seed_std": [
+                0.0,
+                0.31622776601683794,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          }
+        },
+        "exp-004": {
+          "success_rate": {
+            "between_training_seeds": {
+              "mean": 0.0,
+              "std": 0.0,
+              "n": 3,
+              "per_seed": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.0,
+              "per_training_seed_std": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "steps": {
+            "between_training_seeds": {
+              "mean": 123.66666666666667,
+              "std": 177.72879151486214,
+              "n": 3,
+              "per_seed": [
+                28.8,
+                328.7,
+                13.5
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 140.77639810795174,
+              "per_training_seed_std": [
+                13.289929353545196,
+                405.6317569202665,
+                3.4075080500434787
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "battery_remaining_wh": {
+            "between_training_seeds": {
+              "mean": 29.332914532743633,
+              "std": 0.46121197731846536,
+              "n": 3,
+              "per_seed": [
+                29.34480465501793,
+                28.865872457122293,
+                29.788066486090678
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.522260054487221,
+              "per_training_seed_std": [
+                0.36143857632002235,
+                1.1094288088286006,
+                0.09591277831304017
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "inference_latency_ms": {
+            "between_training_seeds": {
+              "mean": 0.12476673352999905,
+              "std": 0.05197507186872034,
+              "n": 3,
+              "per_seed": [
+                0.07874762201811954,
+                0.18113927967201696,
+                0.1144132988998606
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.023553544201973062,
+              "per_training_seed_std": [
+                0.014744793251426226,
+                0.03735465071378402,
+                0.01856118864070894
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:collision": {
+            "between_training_seeds": {
+              "mean": 0.8333333333333334,
+              "std": 0.2081665999466133,
+              "n": 3,
+              "per_seed": [
+                0.9,
+                0.6,
+                1.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.27754184850372005,
+              "per_training_seed_std": [
+                0.31622776601683794,
+                0.5163977794943222,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:out_of_bounds": {
+            "between_training_seeds": {
+              "mean": 0.03333333333333333,
+              "std": 0.05773502691896259,
+              "n": 3,
+              "per_seed": [
+                0.1,
+                0.0,
+                0.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.10540925533894598,
+              "per_training_seed_std": [
+                0.31622776601683794,
+                0.0,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:step_limit": {
+            "between_training_seeds": {
+              "mean": 0.13333333333333333,
+              "std": 0.23094010767585035,
+              "n": 3,
+              "per_seed": [
+                0.0,
+                0.4,
+                0.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.17213259316477406,
+              "per_training_seed_std": [
+                0.0,
+                0.5163977794943222,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          }
+        }
+      },
+      "runs": [
+        {
+          "training_seed": 11,
+          "run_id": "612347eb239a4989ad5e426db3702fb8",
+          "manifest_path": "manifests/612347eb239a4989ad5e426db3702fb8.json",
+          "checkpoint_path": "artifacts/q_tables/612347eb239a4989ad5e426db3702fb8.npy",
+          "registry_uri": "models:/DroneRescueQTable-exp-001/2"
+        },
+        {
+          "training_seed": 23,
+          "run_id": "0bf1f13861324ab7bf99e870aa84c86d",
+          "manifest_path": "manifests/0bf1f13861324ab7bf99e870aa84c86d.json",
+          "checkpoint_path": "artifacts/q_tables/0bf1f13861324ab7bf99e870aa84c86d.npy",
+          "registry_uri": "models:/DroneRescueQTable-exp-001/3"
+        },
+        {
+          "training_seed": 37,
+          "run_id": "ea85481755f9438089c38bdb47851dd9",
+          "manifest_path": "manifests/ea85481755f9438089c38bdb47851dd9.json",
+          "checkpoint_path": "artifacts/q_tables/ea85481755f9438089c38bdb47851dd9.npy",
+          "registry_uri": "models:/DroneRescueQTable-exp-001/4"
+        }
+      ]
+    },
+    "exp-002": {
+      "training_seeds": [
+        11,
+        23,
+        37
+      ],
+      "training_seed_count": 3,
+      "evaluation_episode_count_per_model": 40,
+      "metrics": {
+        "success_rate": {
+          "between_training_seeds": {
+            "mean": 0.0,
+            "std": 0.0,
+            "n": 3,
+            "per_seed": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "within_evaluation_episodes": {
+            "mean_std": 0.0,
+            "per_training_seed_std": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "episodes_per_model": 40
+          }
+        },
+        "steps": {
+          "between_training_seeds": {
+            "mean": 147.025,
+            "std": 45.848793604630416,
+            "n": 3,
+            "per_seed": [
+              193.45,
+              101.775,
+              145.85
+            ]
+          },
+          "within_evaluation_episodes": {
+            "mean_std": 281.91999039149056,
+            "per_training_seed_std": [
+              331.0488344175686,
+              236.04926555537253,
+              278.66187120153063
+            ],
+            "episodes_per_model": 40
+          }
+        },
+        "battery_remaining_wh": {
+          "between_training_seeds": {
+            "mean": 27.139471119691645,
+            "std": 0.12227150864912337,
+            "n": 3,
+            "per_seed": [
+              27.15893136168085,
+              27.25084548277432,
+              27.008636514619763
+            ]
+          },
+          "within_evaluation_episodes": {
+            "mean_std": 3.6065323560720235,
+            "per_training_seed_std": [
+              3.6089525198547965,
+              3.697340073066214,
+              3.51330447529506
+            ],
+            "episodes_per_model": 40
+          }
+        },
+        "inference_latency_ms": {
+          "between_training_seeds": {
+            "mean": 0.07192322858116208,
+            "std": 0.008844588814403627,
+            "n": 3,
+            "per_seed": [
+              0.08209739947963555,
+              0.0676051920200758,
+              0.06606709424377491
+            ]
+          },
+          "within_evaluation_episodes": {
+            "mean_std": 0.03462692978151207,
+            "per_training_seed_std": [
+              0.04163822678833223,
+              0.018207495169680902,
+              0.044035067386523075
+            ],
+            "episodes_per_model": 40
+          }
+        },
+        "failure:collision": {
+          "between_training_seeds": {
+            "mean": 0.75,
+            "std": 0.025000000000000022,
+            "n": 3,
+            "per_seed": [
+              0.775,
+              0.75,
+              0.725
+            ]
+          },
+          "within_evaluation_episodes": {
+            "mean_std": 0.43787788606535916,
+            "per_training_seed_std": [
+              0.42290206176626033,
+              0.4385290096535146,
+              0.45220258677630265
+            ],
+            "episodes_per_model": 40
+          }
+        },
+        "failure:out_of_bounds": {
+          "between_training_seeds": {
+            "mean": 0.09166666666666667,
+            "std": 0.08036375634160796,
+            "n": 3,
+            "per_seed": [
+              0.0,
+              0.15,
+              0.125
+            ]
+          },
+          "within_evaluation_episodes": {
+            "mean_std": 0.23218411628944377,
+            "per_training_seed_std": [
+              0.0,
+              0.36162028533978946,
+              0.3349320635285418
+            ],
+            "episodes_per_model": 40
+          }
+        },
+        "failure:step_limit": {
+          "between_training_seeds": {
+            "mean": 0.15833333333333333,
+            "std": 0.06291528696058958,
+            "n": 3,
+            "per_seed": [
+              0.225,
+              0.1,
+              0.15
+            ]
+          },
+          "within_evaluation_episodes": {
+            "mean_std": 0.3627813857437166,
+            "per_training_seed_std": [
+              0.42290206176626033,
+              0.3038218101251,
+              0.36162028533978946
+            ],
+            "episodes_per_model": 40
+          }
+        }
+      },
+      "by_evaluation_case": {
+        "exp-001": {
+          "success_rate": {
+            "between_training_seeds": {
+              "mean": 0.0,
+              "std": 0.0,
+              "n": 3,
+              "per_seed": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.0,
+              "per_training_seed_std": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "steps": {
+            "between_training_seeds": {
+              "mean": 147.26666666666668,
+              "std": 119.42203872541003,
+              "n": 3,
+              "per_seed": [
+                170.6,
+                17.9,
+                253.3
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 240.2908289375777,
+              "per_training_seed_std": [
+                331.72384766716897,
+                11.713714658941933,
+                377.43492448662226
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "battery_remaining_wh": {
+            "between_training_seeds": {
+              "mean": 29.285240806638992,
+              "std": 0.3238901055043065,
+              "n": 3,
+              "per_seed": [
+                29.293990206954227,
+                29.604667567934506,
+                28.957064645028243
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.7665087880197351,
+              "per_training_seed_std": [
+                0.9381053179091411,
+                0.32601272039033674,
+                1.0354083257597275
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "inference_latency_ms": {
+            "between_training_seeds": {
+              "mean": 0.10312355328953489,
+              "std": 0.03758738290746519,
+              "n": 3,
+              "per_seed": [
+                0.13752799593281526,
+                0.06300709842984395,
+                0.10883556550594546
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.04131253945036402,
+              "per_training_seed_std": [
+                0.03865596172989599,
+                0.011893454789579582,
+                0.07338820183161648
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:collision": {
+            "between_training_seeds": {
+              "mean": 0.7666666666666667,
+              "std": 0.1527525231651947,
+              "n": 3,
+              "per_seed": [
+                0.8,
+                0.9,
+                0.6
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.41808752228898133,
+              "per_training_seed_std": [
+                0.42163702135578396,
+                0.31622776601683794,
+                0.5163977794943222
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:out_of_bounds": {
+            "between_training_seeds": {
+              "mean": 0.06666666666666667,
+              "std": 0.05773502691896258,
+              "n": 3,
+              "per_seed": [
+                0.0,
+                0.1,
+                0.1
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.21081851067789195,
+              "per_training_seed_std": [
+                0.0,
+                0.31622776601683794,
+                0.31622776601683794
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:step_limit": {
+            "between_training_seeds": {
+              "mean": 0.16666666666666666,
+              "std": 0.15275252316519466,
+              "n": 3,
+              "per_seed": [
+                0.2,
+                0.0,
+                0.3
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.30156097096514395,
+              "per_training_seed_std": [
+                0.42163702135578396,
+                0.0,
+                0.4830458915396479
+              ],
+              "episodes_per_model": 10
+            }
+          }
+        },
+        "exp-002": {
+          "success_rate": {
+            "between_training_seeds": {
+              "mean": 0.0,
+              "std": 0.0,
+              "n": 3,
+              "per_seed": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.0,
+              "per_training_seed_std": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "steps": {
+            "between_training_seeds": {
+              "mean": 106.43333333333334,
+              "std": 69.70396927961372,
+              "n": 3,
+              "per_seed": [
+                174.5,
+                109.6,
+                35.2
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 195.2342044030512,
+              "per_training_seed_std": [
+                329.7258962633458,
+                242.8804918747764,
+                13.096225071031387
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "battery_remaining_wh": {
+            "between_training_seeds": {
+              "mean": 21.116371805704386,
+              "std": 0.07883522939790313,
+              "n": 3,
+              "per_seed": [
+                21.18527344175859,
+                21.030399955020606,
+                21.133442020333966
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.6277589654174902,
+              "per_training_seed_std": [
+                0.8922353639345159,
+                0.6258402853300553,
+                0.3652012469878996
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "inference_latency_ms": {
+            "between_training_seeds": {
+              "mean": 0.07105641446373258,
+              "std": 0.017641037251864413,
+              "n": 3,
+              "per_seed": [
+                0.08908160137032099,
+                0.07026122163707108,
+                0.053826420383805695
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.014210484570412301,
+              "per_training_seed_std": [
+                0.016010163392460492,
+                0.021575954272192905,
+                0.005045336046583508
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:collision": {
+            "between_training_seeds": {
+              "mean": 0.8333333333333334,
+              "std": 0.05773502691896257,
+              "n": 3,
+              "per_seed": [
+                0.8,
+                0.8,
+                0.9
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.38650060290946864,
+              "per_training_seed_std": [
+                0.42163702135578396,
+                0.4216370213557839,
+                0.31622776601683794
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:out_of_bounds": {
+            "between_training_seeds": {
+              "mean": 0.06666666666666667,
+              "std": 0.05773502691896258,
+              "n": 3,
+              "per_seed": [
+                0.0,
+                0.1,
+                0.1
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.21081851067789195,
+              "per_training_seed_std": [
+                0.0,
+                0.31622776601683794,
+                0.31622776601683794
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:step_limit": {
+            "between_training_seeds": {
+              "mean": 0.10000000000000002,
+              "std": 0.1,
+              "n": 3,
+              "per_seed": [
+                0.2,
+                0.1,
+                0.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.24595492912420727,
+              "per_training_seed_std": [
+                0.42163702135578396,
+                0.31622776601683794,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          }
+        },
+        "exp-003": {
+          "success_rate": {
+            "between_training_seeds": {
+              "mean": 0.0,
+              "std": 0.0,
+              "n": 3,
+              "per_seed": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.0,
+              "per_training_seed_std": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "steps": {
+            "between_training_seeds": {
+              "mean": 79.03333333333335,
+              "std": 38.979781083702015,
+              "n": 3,
+              "per_seed": [
+                98.0,
+                104.9,
+                34.2
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 168.63670543755467,
+              "per_training_seed_std": [
+                246.81301964577693,
+                244.70728545663604,
+                14.389811210251045
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "battery_remaining_wh": {
+            "between_training_seeds": {
+              "mean": 29.230672916072404,
+              "std": 0.11232383035060435,
+              "n": 3,
+              "per_seed": [
+                29.36036276718292,
+                29.164396294379458,
+                29.167259686654837
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.5924815960380384,
+              "per_training_seed_std": [
+                0.6790010772764217,
+                0.7095987769810432,
+                0.38884493385665025
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "inference_latency_ms": {
+            "between_training_seeds": {
+              "mean": 0.05383417237494773,
+              "std": 0.006288577168174045,
+              "n": 3,
+              "per_seed": [
+                0.050432373806848174,
+                0.061090881921833776,
+                0.049979261396161254
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.011821820662157777,
+              "per_training_seed_std": [
+                0.008708689073080044,
+                0.020657518562345576,
+                0.00609925435104771
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:collision": {
+            "between_training_seeds": {
+              "mean": 0.7999999999999999,
+              "std": 0.17320508075688776,
+              "n": 3,
+              "per_seed": [
+                0.9,
+                0.6,
+                0.9
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.38295110384266606,
+              "per_training_seed_std": [
+                0.31622776601683794,
+                0.5163977794943222,
+                0.31622776601683794
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:out_of_bounds": {
+            "between_training_seeds": {
+              "mean": 0.13333333333333333,
+              "std": 0.15275252316519466,
+              "n": 3,
+              "per_seed": [
+                0.0,
+                0.3,
+                0.1
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.26642455251882863,
+              "per_training_seed_std": [
+                0.0,
+                0.48304589153964794,
+                0.31622776601683794
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:step_limit": {
+            "between_training_seeds": {
+              "mean": 0.06666666666666667,
+              "std": 0.05773502691896258,
+              "n": 3,
+              "per_seed": [
+                0.1,
+                0.1,
+                0.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.21081851067789195,
+              "per_training_seed_std": [
+                0.31622776601683794,
+                0.31622776601683794,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          }
+        },
+        "exp-004": {
+          "success_rate": {
+            "between_training_seeds": {
+              "mean": 0.0,
+              "std": 0.0,
+              "n": 3,
+              "per_seed": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.0,
+              "per_training_seed_std": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "steps": {
+            "between_training_seeds": {
+              "mean": 255.36666666666665,
+              "std": 78.13663246732185,
+              "n": 3,
+              "per_seed": [
+                330.7,
+                174.7,
+                260.7
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 368.67458602994833,
+              "per_training_seed_std": [
+                403.97416033977004,
+                329.59943702756664,
+                372.45016072250826
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "battery_remaining_wh": {
+            "between_training_seeds": {
+              "mean": 28.925598950350786,
+              "std": 0.24122495023363041,
+              "n": 3,
+              "per_seed": [
+                28.796099030827655,
+                29.2039181137627,
+                28.776779706462
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.9811233888674744,
+              "per_training_seed_std": [
+                1.1068296619773117,
+                0.8833836566566385,
+                0.9531568479684732
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "inference_latency_ms": {
+            "between_training_seeds": {
+              "mean": 0.059678774196433165,
+              "std": 0.014188602227640606,
+              "n": 3,
+              "per_seed": [
+                0.0513476268085578,
+                0.07606156609155441,
+                0.05162712968918728
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.012778759273290642,
+              "per_training_seed_std": [
+                0.007320904685525414,
+                0.015649584603277648,
+                0.015365788531068868
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:collision": {
+            "between_training_seeds": {
+              "mean": 0.6,
+              "std": 0.09999999999999998,
+              "n": 3,
+              "per_seed": [
+                0.6,
+                0.7,
+                0.5
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.5088299825762334,
+              "per_training_seed_std": [
+                0.5163977794943223,
+                0.4830458915396479,
+                0.5270462766947299
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:out_of_bounds": {
+            "between_training_seeds": {
+              "mean": 0.10000000000000002,
+              "std": 0.1,
+              "n": 3,
+              "per_seed": [
+                0.0,
+                0.1,
+                0.2
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.24595492912420727,
+              "per_training_seed_std": [
+                0.0,
+                0.31622776601683794,
+                0.42163702135578396
+              ],
+              "episodes_per_model": 10
+            }
+          },
+          "failure:step_limit": {
+            "between_training_seeds": {
+              "mean": 0.30000000000000004,
+              "std": 0.1,
+              "n": 3,
+              "per_seed": [
+                0.4,
+                0.2,
+                0.3
+              ]
+            },
+            "within_evaluation_episodes": {
+              "mean_std": 0.4736935641299181,
+              "per_training_seed_std": [
+                0.5163977794943223,
+                0.42163702135578396,
+                0.48304589153964794
+              ],
+              "episodes_per_model": 10
+            }
+          }
+        }
+      },
+      "runs": [
+        {
+          "training_seed": 11,
+          "run_id": "d43628f87e9a49d9b295d6e59b60f8d2",
+          "manifest_path": "manifests/d43628f87e9a49d9b295d6e59b60f8d2.json",
+          "checkpoint_path": "artifacts/q_tables/d43628f87e9a49d9b295d6e59b60f8d2.npy",
+          "registry_uri": "models:/DroneRescueQTable-exp-002/2"
+        },
+        {
+          "training_seed": 23,
+          "run_id": "cb3a90fac6244a3297a01be8c4997f81",
+          "manifest_path": "manifests/cb3a90fac6244a3297a01be8c4997f81.json",
+          "checkpoint_path": "artifacts/q_tables/cb3a90fac6244a3297a01be8c4997f81.npy",
+          "registry_uri": "models:/DroneRescueQTable-exp-002/3"
+        },
+        {
+          "training_seed": 37,
+          "run_id": "12b77008d4474052aaa051c2e9d958e0",
+          "manifest_path": "manifests/12b77008d4474052aaa051c2e9d958e0.json",
+          "checkpoint_path": "artifacts/q_tables/12b77008d4474052aaa051c2e9d958e0.npy",
+          "registry_uri": "models:/DroneRescueQTable-exp-002/4"
+        }
+      ]
+    }
+  },
+  "return_policy": "No return aggregation or ranking across cases; each case includes its own reward_version.",
+  "variance_policy": "Between-training-seed SD is computed over each model's mean across common suite episodes. Evaluation-episode SD is computed within each trained model then averaged across the three models."
+}

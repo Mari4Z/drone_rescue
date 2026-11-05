@@ -5,7 +5,8 @@ import yaml
 
 import env
 import envs
-from pipelines.evaluate import evaluate, load_q_table, load_suite, save_q_table
+from pipelines.evaluate import evaluate, evaluate_from_manifest, load_q_table, load_suite, save_q_table
+from pipelines.train import load_profile
 from agent.qlearning import QAgent as LegacyQAgent
 from agents.qlearning import QAgent
 from env.drone_env import DroneEnv as LegacyDroneEnv
@@ -384,3 +385,70 @@ def test_q_table_checkpoint_round_trip(tmp_path):
     assert np.array_equal(loaded[(1,) * 16], agent.q[(1,) * 16])
     with pytest.raises(FileExistsError):
         save_q_table(agent, checkpoint)
+
+
+def test_manifest_checkpoint_reproduces_public_evaluation(tmp_path):
+    import hashlib
+
+    config = load_config("configs/levels/n1_mision_base.yaml")
+    config["mission"]["max_steps"] = 8
+    config_path = tmp_path / "short_n1.yaml"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    suite = {
+        "evaluation_suite_id": "manifest-reproduction-test",
+        "version": "test-1",
+        "split": "public_validation",
+        "episodes_per_level": 1,
+        "seeds": [42],
+        "levels": [{"id": "N1", "config": str(config_path)}],
+        "references": ["random", "rule", "q_learning_greedy"],
+    }
+    suite_path = tmp_path / "suite.yaml"
+    suite_path.write_text(yaml.safe_dump(suite), encoding="utf-8")
+    agent = QAgent(n_actions=7, eps=0, seed=3)
+    state = (0,) * 16
+    agent.q[state][0] = 1.0
+    checkpoint = save_q_table(agent, tmp_path / "q_table.npy")
+    config_artifact = tmp_path / "config.json"
+    config_bytes = b'{"resolved": true}\n'
+    config_artifact.write_bytes(config_bytes)
+    normalization_artifact = tmp_path / "normalization.json"
+    normalization_bytes = b'{"method": "test"}\n'
+    normalization_artifact.write_bytes(normalization_bytes)
+    manifest = {
+        "model_uri": checkpoint.as_uri(),
+        "model_sha256": hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
+        "config_uri": config_artifact.as_uri(),
+        "config_sha256": hashlib.sha256(config_bytes).hexdigest(),
+        "normalization_uri": normalization_artifact.as_uri(),
+        "normalization_sha256": hashlib.sha256(normalization_bytes).hexdigest(),
+        "evaluation_suite_id": suite["evaluation_suite_id"],
+        "evaluation_suite_sha256": hashlib.sha256(suite_path.read_bytes()).hexdigest(),
+        "environment_version": ENVIRONMENT_VERSION,
+    }
+    manifest_path = tmp_path / "manifest.json"
+    import json
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    direct = evaluate(suite_path, checkpoint, tmp_path / "direct.json")
+    reproduced = evaluate_from_manifest(manifest_path, suite_path, tmp_path / "reproduced.json")
+
+    for direct_case, reproduced_case in zip(direct["cases"], reproduced["cases"]):
+        assert direct_case["metrics"]["success_rate"] == reproduced_case["metrics"]["success_rate"]
+        for left, right in zip(direct_case["episodes"], reproduced_case["episodes"]):
+            for key in ("seed", "success", "cause", "steps", "return", "battery_remaining_wh", "collisions"):
+                assert left[key] == right[key]
+
+
+@pytest.mark.parametrize("profile_path", [
+    "configs/training/n1.yaml",
+    "configs/training/n2.yaml",
+    "configs/training/n3.yaml",
+])
+def test_training_profiles_resolve_versioned_levels(profile_path):
+    profile, _ = load_profile(profile_path)
+    environment = DroneEnv(config_path=profile["level"]["config"])
+    assert profile["level"]["id"] == environment.config["level"]["id"]
+    assert profile["experiment"]["hypothesis"]
+    assert profile["training"]["episodes"] > 0
+    assert profile["training"]["evaluation_seeds"]

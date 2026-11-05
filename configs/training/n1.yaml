@@ -1,0 +1,16 @@
+experiment:
+  id: n1-base
+  hypothesis: "Una política greedy puede aprender la misión base sin viento con obstáculos escasos y batería holgada."
+level:
+  id: N1
+  config: configs/levels/n1_mision_base.yaml
+training:
+  episodes: 5000
+  evaluation_interval: 250
+  evaluation_seeds: [101, 211, 307, 401, 503]
+  agent:
+    alpha: 0.2
+    gamma: 0.99
+    epsilon_start: 1.0
+    epsilon_min: 0.05
+    epsilon_decay: 0.999

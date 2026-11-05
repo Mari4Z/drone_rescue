@@ -1,0 +1,496 @@
+"""FastAPI entry point; the Python environment remains authoritative."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import tempfile
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+from threading import RLock
+from typing import Literal
+from urllib.parse import urlparse
+
+import mlflow
+import numpy as np
+import uvicorn
+import yaml
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from mlflow import MlflowClient
+from mlflow.exceptions import MlflowException
+from pydantic import BaseModel, Field
+
+from envs.drone_env import ENVIRONMENT_VERSION, DroneEnv
+from pipelines.evaluate import (
+    QLearningPolicy,
+    RulePolicy,
+    evaluate,
+    load_q_table,
+    load_suite,
+)
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+MANIFEST_DIR = Path(os.getenv("DRONE_RESCUE_MANIFEST_DIR", PROJECT_ROOT / "manifests")).resolve()
+EVALUATION_SUITE_PATH = Path(
+    os.getenv("DRONE_RESCUE_EVALUATION_SUITE", PROJECT_ROOT / "configs" / "finalist_evaluation_suite.yaml")
+).resolve()
+API_VERSION = os.getenv("DRONE_RESCUE_API_VERSION", "0.1.0")
+MLFLOW_UI_URL = os.getenv("MLFLOW_UI_URL")
+EpisodeMode = Literal["manual", "aleatorio", "referencia", "evaluacion", "entrenamiento", "replay"]
+
+
+class LoadRequest(BaseModel):
+    run_id: str = Field(pattern=r"^[A-Za-z0-9_-]+$")
+    seed: int = 0
+
+
+class ResetRequest(BaseModel):
+    mode: EpisodeMode = "manual"
+    seed: int | None = None
+
+
+@dataclass
+class ActiveRun:
+    run_id: str
+    manifest: dict
+    model_path: Path
+    environment_config: dict
+    environment: DroneEnv
+    q_table: dict
+    temporary_directory: tempfile.TemporaryDirectory
+    mode: str = "manual"
+    observation: np.ndarray | None = None
+    reward: float = 0.0
+    cause: str | None = None
+    terminated: bool = False
+    truncated: bool = False
+
+
+class ApiRuntime:
+    def __init__(self) -> None:
+        self.active: ActiveRun | None = None
+        self.lock = RLock()
+
+    def require_active(self) -> ActiveRun:
+        if self.active is None:
+            raise HTTPException(status_code=409, detail="Primero carga un modelo con POST /load")
+        return self.active
+
+
+runtime = ApiRuntime()
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _read_manifest(run_id: str) -> dict:
+    path = MANIFEST_DIR / f"{run_id}.json"
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=f"No existe el manifiesto del run {run_id}") from error
+    except json.JSONDecodeError as error:
+        raise HTTPException(status_code=500, detail=f"El manifiesto de {run_id} no es JSON válido") from error
+    if not isinstance(manifest, dict):
+        raise HTTPException(status_code=500, detail=f"El manifiesto de {run_id} debe ser un objeto JSON")
+    return manifest
+
+
+def _verified_artifact(manifest: dict, uri_field: str, hash_field: str, directory: Path) -> Path:
+    uri = manifest.get(uri_field)
+    expected_hash = manifest.get(hash_field)
+    if not uri or not expected_hash:
+        raise HTTPException(status_code=422, detail=f"El manifiesto no contiene {uri_field} y {hash_field}")
+    try:
+        downloaded = Path(mlflow.artifacts.download_artifacts(artifact_uri=uri))
+    except (MlflowException, FileNotFoundError, OSError) as error:
+        raise HTTPException(status_code=502, detail=f"No se pudo descargar {uri_field} desde MLflow: {error}") from error
+    if not downloaded.is_file():
+        raise HTTPException(status_code=502, detail=f"MLflow no devolvió un archivo para {uri_field}")
+    actual_hash = _sha256(downloaded)
+    if actual_hash != expected_hash:
+        raise HTTPException(status_code=409, detail=f"SHA-256 de {uri_field} no coincide con el manifiesto")
+    target = directory / downloaded.name
+    shutil.copyfile(downloaded, target)
+    return target
+
+
+def _validate_model_compatibility(manifest: dict, environment_config: dict, normalization: dict) -> None:
+    if manifest.get("environment_version") != ENVIRONMENT_VERSION:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"El modelo requiere environment_version={manifest.get('environment_version')!r}; "
+                f"esta API sirve {ENVIRONMENT_VERSION!r} y no tiene un adaptador histórico validado"
+            ),
+        )
+    experiment = environment_config.get("experiment", {})
+    level = environment_config.get("level", {})
+    if not isinstance(experiment, dict) or not isinstance(level, dict):
+        raise HTTPException(status_code=422, detail="Metadatos del ambiente inválidos")
+    model_family = experiment.get("model_family") or level.get("model_family")
+    if normalization.get("family") != model_family or model_family != "drone-rescue-v2":
+        raise HTTPException(status_code=409, detail="La familia del modelo y la normalización no son compatibles")
+    if normalization.get("method") != "discretize_observation":
+        raise HTTPException(status_code=409, detail="Método de normalización no soportado por esta API")
+    q_learning = environment_config.get("q_learning")
+    parameters = q_learning.get("discretization") if isinstance(q_learning, dict) else None
+    if not isinstance(parameters, dict) or normalization.get("parameters") != parameters:
+        raise HTTPException(status_code=409, detail="La discretización no coincide con el ambiente del manifiesto")
+    if normalization.get("state_dimensions") != 16 or normalization.get("action_dimensions") != 7:
+        raise HTTPException(status_code=409, detail="Las dimensiones del modelo no corresponden a drone-rescue-v2")
+
+
+def _supported_mode(mode: str) -> None:
+    if mode in {"entrenamiento", "replay"}:
+        raise HTTPException(
+            status_code=501,
+            detail=f"El modo {mode!r} todavía no está implementado; no se devolverá una simulación sustituta",
+        )
+
+
+def _episode_payload(active: ActiveRun) -> dict:
+    environment = active.environment
+    return {
+        "run_id": active.run_id,
+        "mode": active.mode,
+        "position_m": environment.position.astype(float).tolist(),
+        "telemetry": {
+            "velocity_mps": environment.velocity.astype(float).tolist(),
+            "battery_wh": float(environment.battery_wh),
+            "battery_fraction": float(environment.battery_wh / environment.config["battery"]["capacity_wh"]),
+            "has_supply": bool(environment.has_supply),
+            "stage": environment.stage,
+            "contacts": int(environment.contacts),
+            "steps": int(environment.steps),
+            "wind_mps2": environment.wind.astype(float).tolist(),
+            "environment_version": environment.environment_version,
+        },
+        "reward": float(active.reward),
+        "cause": active.cause,
+        "terminated": active.terminated,
+        "truncated": active.truncated,
+    }
+
+
+def _catalog_manifest_map() -> dict[str, dict]:
+    manifests = {}
+    if not MANIFEST_DIR.is_dir():
+        raise HTTPException(status_code=503, detail=f"No existe el directorio de manifiestos: {MANIFEST_DIR}")
+    for path in sorted(MANIFEST_DIR.glob("*.json")):
+        if path.name == "model-manifest.template.json":
+            continue
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as error:
+            raise HTTPException(status_code=500, detail=f"El manifiesto {path.name} no es JSON válido") from error
+        if not isinstance(manifest, dict):
+            raise HTTPException(status_code=500, detail=f"El manifiesto {path.name} debe ser un objeto JSON")
+        run_id = manifest.get("run_id")
+        if run_id:
+            manifests[str(run_id)] = manifest
+    return manifests
+
+
+def _mlflow_link(tracking_uri: str, experiment_id: str, run_id: str) -> str | None:
+    base_url = MLFLOW_UI_URL or (
+        tracking_uri if urlparse(tracking_uri).scheme in {"http", "https"} else None
+    )
+    if base_url:
+        return f"{base_url.rstrip('/')}/#/experiments/{experiment_id}/runs/{run_id}"
+    return None
+
+
+def _create_app(*, production: bool | None = None, cors_origins: list[str] | None = None) -> FastAPI:
+    production = (
+        os.getenv("DRONE_RESCUE_ENV", "development").lower() == "production"
+        if production is None
+        else production
+    )
+    if cors_origins is None:
+        configured_origins = os.getenv("DRONE_RESCUE_CORS_ORIGINS")
+        cors_origins = (
+            [origin.strip() for origin in configured_origins.split(",") if origin.strip()]
+            if configured_origins is not None
+            else ([] if production else ["http://localhost:5173", "http://localhost:3000"])
+        )
+    if production and any(urlparse(origin).scheme != "https" for origin in cors_origins):
+        raise RuntimeError("En producción, todos los orígenes CORS deben usar HTTPS")
+    if MLFLOW_UI_URL:
+        ui_scheme = urlparse(MLFLOW_UI_URL).scheme
+        if ui_scheme not in {"http", "https"} or (production and ui_scheme != "https"):
+            raise RuntimeError("MLFLOW_UI_URL debe ser HTTPS en producción")
+
+    application = FastAPI(title="Drone Rescue API", version=API_VERSION)
+    if cors_origins:
+        application.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=False,
+            allow_methods=["GET", "POST"],
+            allow_headers=["Content-Type"],
+        )
+
+    @application.middleware("http")
+    async def enforce_https(request: Request, call_next):
+        if production and request.url.scheme != "https":
+            return JSONResponse(
+                status_code=426,
+                content={"detail": "HTTPS es obligatorio en producción"},
+            )
+        return await call_next(request)
+
+    @application.get("/health")
+    def health():
+        with runtime.lock:
+            return {"status": "ok", "model_loaded": runtime.active is not None}
+
+    @application.get("/version")
+    def version_info():
+        return {"api_version": API_VERSION, "environment_version": ENVIRONMENT_VERSION}
+
+    @application.get("/catalog")
+    def catalog():
+        manifests = _catalog_manifest_map()
+        client = MlflowClient()
+        try:
+            experiments = client.search_experiments()
+            experiment_names = {experiment.experiment_id: experiment.name for experiment in experiments}
+            tracking_uri = mlflow.get_tracking_uri()
+            entries = []
+            for experiment in experiments:
+                token = None
+                while True:
+                    page = client.search_runs(
+                        experiment_ids=[experiment.experiment_id],
+                        order_by=["attributes.start_time DESC"],
+                        max_results=1000,
+                        page_token=token,
+                    )
+                    for run in page:
+                        run_id = run.info.run_id
+                        manifest = manifests.get(run_id, {})
+                        tags = run.data.tags
+                        entries.append({
+                            "run_id": run_id,
+                            "status": run.info.status,
+                            "checkpoint_status": tags.get("checkpoint_status"),
+                            "hypothesis": tags.get("hypothesis"),
+                            "commit": tags.get("git_commit") or manifest.get("git_commit"),
+                            "level": tags.get("level_id") or manifest.get("level_id"),
+                            "metrics": dict(run.data.metrics),
+                            "experiment": experiment_names.get(run.info.experiment_id),
+                            "manifest_available": bool(manifest),
+                            "model_sha256": manifest.get("model_sha256"),
+                            "registry_uri": manifest.get("registry_uri"),
+                            "mlflow_link": _mlflow_link(tracking_uri, run.info.experiment_id, run_id),
+                            "mlflow_tracking_uri": tracking_uri,
+                            "mlflow_run_uri": f"runs:/{run_id}",
+                        })
+                    token = page.token
+                    if not token:
+                        break
+        except MlflowException as error:
+            raise HTTPException(status_code=503, detail=f"No se pudo consultar MLflow: {error}") from error
+        return {"runs": entries}
+
+    @application.post("/load")
+    def load_model(request: LoadRequest):
+        manifest = _read_manifest(request.run_id)
+        if str(manifest.get("run_id")) != request.run_id:
+            raise HTTPException(status_code=422, detail="El run_id del manifiesto no coincide con la solicitud")
+        temporary_directory = tempfile.TemporaryDirectory(prefix=f"drone-rescue-{request.run_id}-")
+        directory = Path(temporary_directory.name)
+        try:
+            model_path = _verified_artifact(manifest, "model_uri", "model_sha256", directory)
+            config_path = _verified_artifact(manifest, "config_uri", "config_sha256", directory)
+            normalization_path = _verified_artifact(
+                manifest, "normalization_uri", "normalization_sha256", directory
+            )
+            config_document = json.loads(config_path.read_text(encoding="utf-8"))
+            if not isinstance(config_document, dict):
+                raise HTTPException(status_code=422, detail="config.json debe ser un objeto JSON")
+            environment_config = config_document.get("environment")
+            if not isinstance(environment_config, dict):
+                raise HTTPException(status_code=422, detail="config.json no contiene el ambiente resuelto")
+            normalization = json.loads(normalization_path.read_text(encoding="utf-8"))
+            if not isinstance(normalization, dict):
+                raise HTTPException(status_code=422, detail="normalization.json debe ser un objeto JSON")
+            _validate_model_compatibility(manifest, environment_config, normalization)
+            environment_config_path = directory / "environment.yaml"
+            environment_config_path.write_text(
+                yaml.safe_dump(environment_config, sort_keys=True),
+                encoding="utf-8",
+            )
+            environment = DroneEnv(config_path=environment_config_path)
+            q_table = load_q_table(model_path)
+            if environment.action_space.n != int(normalization["action_dimensions"]):
+                raise HTTPException(status_code=409, detail="El espacio de acciones no coincide con la normalización")
+            observation, _ = environment.reset(seed=request.seed)
+            new_active = ActiveRun(
+                run_id=request.run_id,
+                manifest=manifest,
+                model_path=model_path,
+                environment_config=environment_config,
+                environment=environment,
+                q_table=q_table,
+                temporary_directory=temporary_directory,
+                observation=observation,
+            )
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
+            temporary_directory.cleanup()
+            raise HTTPException(status_code=422, detail=f"Artefactos incompatibles o inválidos: {error}") from error
+        except HTTPException:
+            temporary_directory.cleanup()
+            raise
+
+        with runtime.lock:
+            previous = runtime.active
+            runtime.active = new_active
+            if previous is not None:
+                previous.environment.close()
+                previous.temporary_directory.cleanup()
+        return {
+            "model": {
+                "run_id": new_active.run_id,
+                "sha256": manifest["model_sha256"],
+                "level": manifest.get("level_id"),
+                "commit": manifest.get("git_commit"),
+            },
+            "environment": {
+                "version": environment.environment_version,
+                "reward_version": environment.reward_version,
+                "level": manifest.get("level_id"),
+                "model_family": (
+                    environment_config.get("experiment", {}).get("model_family")
+                    or environment_config.get("level", {}).get("model_family")
+                ),
+            },
+            "config": environment_config,
+            "config_sha256": manifest["config_sha256"],
+            "mode": new_active.mode,
+        }
+
+    @application.post("/evaluate")
+    def evaluate_active_model():
+        evaluation_directory = tempfile.TemporaryDirectory(prefix="drone-rescue-evaluation-")
+        try:
+            with runtime.lock:
+                active = runtime.require_active()
+                manifest = active.manifest.copy()
+                model_path = Path(evaluation_directory.name) / active.model_path.name
+                shutil.copyfile(active.model_path, model_path)
+            try:
+                suite, suite_path = load_suite(EVALUATION_SUITE_PATH)
+            except (OSError, ValueError) as error:
+                raise HTTPException(status_code=422, detail=f"No se pudo cargar la suite: {error}") from error
+            suite_sha256 = _sha256(suite_path)
+            if (
+                suite["evaluation_suite_id"] != manifest.get("evaluation_suite_id")
+                or suite["version"] != manifest.get("evaluation_suite_version")
+                or suite_sha256 != manifest.get("evaluation_suite_sha256")
+            ):
+                raise HTTPException(status_code=409, detail="La suite configurada no coincide con el manifiesto")
+            evaluation_id = str(uuid.uuid4())
+            output_path = PROJECT_ROOT / "artifacts" / "results" / f"api-evaluation-{evaluation_id}.json"
+            try:
+                result = evaluate(suite_path, model_path, output_path)
+            except (ValueError, FileExistsError) as error:
+                raise HTTPException(status_code=422, detail=f"No se pudo ejecutar la evaluación: {error}") from error
+            return {
+                "evaluation_id": evaluation_id,
+                "run_id": manifest["run_id"],
+                "result_path": str(output_path.relative_to(PROJECT_ROOT)),
+                "result": result,
+            }
+        finally:
+            evaluation_directory.cleanup()
+
+    @application.post("/episode/reset")
+    def reset_episode(request: ResetRequest):
+        _supported_mode(request.mode)
+        with runtime.lock:
+            active = runtime.require_active()
+            active.mode = request.mode
+            active.observation, _ = active.environment.reset(seed=request.seed)
+            active.reward = 0.0
+            active.cause = None
+            active.terminated = False
+            active.truncated = False
+            return _episode_payload(active)
+
+    @application.get("/episode/step")
+    def episode_step(
+        mode: EpisodeMode | None = Query(default=None),
+        action: int | None = Query(default=None),
+    ):
+        with runtime.lock:
+            active = runtime.require_active()
+            if mode is not None and mode != active.mode:
+                raise HTTPException(status_code=409, detail="Cambia el modo con POST /episode/reset antes del paso")
+            _supported_mode(active.mode)
+            if active.terminated or active.truncated:
+                raise HTTPException(status_code=409, detail=f"El episodio terminó con causa {active.cause!r}; reinícialo")
+            observation = active.observation
+            if observation is None:
+                raise HTTPException(status_code=409, detail="El episodio no tiene una observación activa")
+            if active.mode == "manual":
+                if action is None:
+                    raise HTTPException(status_code=422, detail="El modo manual requiere el parámetro action")
+                selected_action = action
+            elif active.mode == "aleatorio":
+                if action is not None:
+                    raise HTTPException(status_code=422, detail="El modo aleatorio no acepta action")
+                selected_action = int(active.environment.np_random.integers(active.environment.action_space.n))
+            elif active.mode == "referencia":
+                if action is not None:
+                    raise HTTPException(status_code=422, detail="El modo referencia no acepta action")
+                selected_action = RulePolicy().act(observation, active.environment.config)
+            else:
+                if action is not None:
+                    raise HTTPException(status_code=422, detail=f"El modo {active.mode!r} no acepta action")
+                selected_action = QLearningPolicy(active.q_table).act(observation, active.environment.config)
+            if not active.environment.action_space.contains(selected_action):
+                raise HTTPException(status_code=422, detail=f"Acción fuera del espacio válido: {selected_action}")
+            next_observation, reward, terminated, truncated, info = active.environment.step(selected_action)
+            active.observation = next_observation
+            active.reward = float(reward)
+            active.cause = info["cause"]
+            active.terminated = bool(terminated)
+            active.truncated = bool(truncated)
+            return _episode_payload(active)
+
+    return application
+
+
+app = _create_app()
+
+
+def main() -> None:
+    production = os.getenv("DRONE_RESCUE_ENV", "development").lower() == "production"
+    options = {
+        "app": "api.main:app",
+        "host": os.getenv("DRONE_RESCUE_API_HOST", "127.0.0.1"),
+        "port": int(os.getenv("DRONE_RESCUE_API_PORT", "8000")),
+    }
+    if production:
+        certificate = os.getenv("DRONE_RESCUE_SSL_CERTFILE")
+        private_key = os.getenv("DRONE_RESCUE_SSL_KEYFILE")
+        if not certificate or not private_key:
+            raise RuntimeError("Producción requiere DRONE_RESCUE_SSL_CERTFILE y DRONE_RESCUE_SSL_KEYFILE")
+        options.update(ssl_certfile=certificate, ssl_keyfile=private_key)
+    uvicorn.run(**options)
+
+
+if __name__ == "__main__":
+    main()
