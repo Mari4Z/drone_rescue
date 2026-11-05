@@ -1,0 +1,23 @@
+{
+  "config_sha256": "0055f099785ca38631254f2eaa6c00801acd05f8b6dba361a5c89e71aad416cc",
+  "config_uri": "runs:/d43628f87e9a49d9b295d6e59b60f8d2/config/config.json",
+  "diagnostic": null,
+  "environment_version": "2.0.0",
+  "evaluation_sha256": "680779d254143fea93026876f1b8e7e25e3bf179d60d216b9fdc2cf3da123544",
+  "evaluation_suite_id": "drone-rescue-finalists-public",
+  "evaluation_suite_sha256": "2fb8ee004fe8185fc1288f504eec4b61f9cd9855355f0d5c534edc4819e8d124",
+  "evaluation_suite_version": "1.0.0",
+  "git_commit": "1b9fa6d864f1c5ff4549ee5adb59084e9c79cb19",
+  "level_id": "exp-002",
+  "model_sha256": "a1813678604ea5596f992312d7a0d5b97d1eaaa13afcfda8a07c07436f341f6c",
+  "model_uri": "runs:/d43628f87e9a49d9b295d6e59b60f8d2/checkpoints/d43628f87e9a49d9b295d6e59b60f8d2.npy",
+  "normalization_sha256": "886c0e47035a455f185f21698c924dc817f12d67b8ce0a1969cc093aa6fc074a",
+  "normalization_uri": "runs:/d43628f87e9a49d9b295d6e59b60f8d2/normalization/normalization.json",
+  "parent_run_id": null,
+  "registry_name": "DroneRescueQTable-exp-002",
+  "registry_uri": "models:/DroneRescueQTable-exp-002/2",
+  "registry_version": "2",
+  "run_id": "d43628f87e9a49d9b295d6e59b60f8d2",
+  "runtime_ref": "python==3.14.4; numpy==2.5.4; gymnasium==1.4.0; PyYAML==6.0.3; mlflow==3.18.0",
+  "seed": 11
+}

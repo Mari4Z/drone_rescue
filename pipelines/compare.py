@@ -25,6 +25,14 @@ DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "artifacts" / "results"
 TRAINING_PROFILE_TEMPLATE = PROJECT_ROOT / "configs" / "training" / "n1.yaml"
 
 
+def _repo_path(path: str | Path) -> str:
+    resolved = Path(path).resolve()
+    try:
+        return str(resolved.relative_to(PROJECT_ROOT))
+    except ValueError:
+        return str(path)
+
+
 def _load_candidate(candidate_id: str) -> dict:
     path = PROJECT_ROOT / "configs" / "experiments" / f"{candidate_id}.yaml"
     with path.open(encoding="utf-8") as source:
@@ -118,7 +126,14 @@ def summarize_finalist(runs: list[dict]) -> dict:
         "evaluation_episode_count_per_model": len(all_episodes) // max(len(runs), 1),
         "metrics": metrics,
         "by_evaluation_case": case_summaries,
-        "runs": [{key: run[key] for key in ("training_seed", "run_id", "manifest_path", "checkpoint_path", "registry_uri")} for run in runs],
+        "runs": [
+            {
+                **{key: run[key] for key in ("training_seed", "run_id", "registry_uri")},
+                "manifest_path": _repo_path(run["manifest_path"]),
+                "checkpoint_path": _repo_path(run["checkpoint_path"]),
+            }
+            for run in runs
+        ],
     }
 
 
@@ -240,7 +255,7 @@ def decision_markdown(result: dict) -> str:
             lines.append(f"- `{cid}` rechazado en cribado: run `{candidate['screening_run_id']}`, perfil/config `{candidate['config_path']}`; su run, checkpoint y versión registrada se conservan en MLflow.")
     for candidate_id in selected_ids:
         for run in finalists[candidate_id]["runs"]:
-            lines.append(f"- `{candidate_id}` semilla {run['training_seed']}: run `{run['run_id']}`, manifiesto `{run['manifest_path']}`, Registry `{run['registry_uri']}`.")
+            lines.append(f"- `{candidate_id}` semilla {run['training_seed']}: run `{run['run_id']}`, manifiesto `{_repo_path(run['manifest_path'])}`, Registry `{run['registry_uri']}`.")
     lines.extend([
         "",
         f"Los retornos se guardan por caso en el JSON de comparación, pero no se promedian ni se usan para ordenar candidatos. Todas las configuraciones conservan `reward_version={result['reward_version']}` y el contrato de observación/acción de la misma familia de modelos.",
@@ -328,7 +343,7 @@ def run_comparison(
                 "screening_registry_uri": result["registry_uri"],
                 "screening_metrics": primary,
                 "common_suite_metrics": {case_id: case["metrics"] for case_id, case in q_cases.items()},
-                "screening_manifest": result["manifest_path"],
+                "screening_manifest": _repo_path(result["manifest_path"]),
             })
 
         ranked = rank_screening_candidates(screening)

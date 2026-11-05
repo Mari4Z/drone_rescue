@@ -7,7 +7,7 @@
   "evaluation_suite_id": "drone-rescue-finalists-public",
   "evaluation_suite_sha256": "2fb8ee004fe8185fc1288f504eec4b61f9cd9855355f0d5c534edc4819e8d124",
   "evaluation_suite_version": "1.0.0",
-  "git_commit": "6d919639460c0b7b910ca758611c4398f8d349b8",
+  "git_commit": "1b9fa6d864f1c5ff4549ee5adb59084e9c79cb19",
   "level_id": "exp-003",
   "model_sha256": "59345efb17adb1c4055580267fe398a44170137041a424ced7d5e6fe7dd1d41c",
   "model_uri": "runs:/d21f0d0528d74cb6b107217230ac0d13/checkpoints/d21f0d0528d74cb6b107217230ac0d13.npy",
@@ -19,5 +19,6 @@
   "registry_version": "1",
   "run_id": "d21f0d0528d74cb6b107217230ac0d13",
   "runtime_ref": "python==3.14.4; numpy==2.5.4; gymnasium==1.4.0; PyYAML==6.0.3; mlflow==3.18.0",
-  "seed": 7001
+  "seed": 7001,
+  "git_commit_at_training": "6d919639460c0b7b910ca758611c4398f8d349b8"
 }

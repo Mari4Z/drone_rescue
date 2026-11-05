@@ -1,4 +1,4 @@
-from pipelines.compare import rank_screening_candidates, summarize_finalist
+from pipelines.compare import _repo_path, rank_screening_candidates, summarize_finalist
 
 
 def _candidate(candidate_id, success, failures, steps=20, battery=50, latency=1.0, reward=9999):
@@ -43,3 +43,10 @@ def test_summary_separates_training_seed_and_episode_variance():
     assert success["between_training_seeds"]["std"] > 0
     assert success["within_evaluation_episodes"]["mean_std"] > 0
     assert "failure:collision" in summary["metrics"]
+
+
+def test_repo_path_is_portable_for_project_files():
+    from pathlib import Path
+
+    project_file = Path(__file__).resolve().parents[1] / "docs" / "decision.md"
+    assert _repo_path(project_file) == "docs/decision.md"
