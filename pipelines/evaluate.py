@@ -52,12 +52,19 @@ def _resolve_project_path(path: str | Path) -> Path:
 
 
 def load_q_table(path: str | Path) -> dict[tuple[int, ...], np.ndarray]:
-    """Lee un NPZ portable con arrays `states` [n,16] y `q_values` [n,7]."""
-    with np.load(path, allow_pickle=False) as data:
-        if not {"states", "q_values"}.issubset(data.files):
-            raise ValueError("El checkpoint NPZ debe contener los arrays states y q_values")
-        states = np.asarray(data["states"], dtype=np.int64)
-        q_values = np.asarray(data["q_values"], dtype=np.float64)
+    """Lee una tabla sparse NPZ o NPY estructurada sin objetos/pickle."""
+    loaded = np.load(path, allow_pickle=False)
+    if isinstance(loaded, np.ndarray):
+        if loaded.dtype.names != ("states", "q_values"):
+            raise ValueError("El checkpoint NPY debe tener campos states[16] y q_values[7]")
+        states = np.asarray(loaded["states"], dtype=np.int64)
+        q_values = np.asarray(loaded["q_values"], dtype=np.float64)
+    else:
+        with loaded as data:
+            if not {"states", "q_values"}.issubset(data.files):
+                raise ValueError("El checkpoint NPZ debe contener los arrays states y q_values")
+            states = np.asarray(data["states"], dtype=np.int64)
+            q_values = np.asarray(data["q_values"], dtype=np.float64)
     if states.ndim != 2 or q_values.ndim != 2 or states.shape[0] != q_values.shape[0]:
         raise ValueError("states y q_values deben ser matrices con la misma cantidad de filas")
     if q_values.shape[1] != 7 or states.shape[1] != 16:
@@ -68,7 +75,7 @@ def load_q_table(path: str | Path) -> dict[tuple[int, ...], np.ndarray]:
 
 
 def save_q_table(agent: QAgent, path: str | Path) -> Path:
-    """Exporta la tabla dispersa de QAgent al formato NPZ que carga este pipeline."""
+    """Exporta una tabla sparse como NPY estructurado o NPZ según extensión."""
     target = Path(path)
     if target.exists():
         raise FileExistsError(f"El checkpoint ya existe: {target}. Usa una ruta/version nueva.")
@@ -76,8 +83,53 @@ def save_q_table(agent: QAgent, path: str | Path) -> Path:
     entries = sorted((tuple(map(int, state)), np.asarray(values, dtype=np.float64)) for state, values in agent.q.items())
     states = np.asarray([state for state, _ in entries], dtype=np.int64).reshape((-1, 16))
     q_values = np.asarray([values for _, values in entries], dtype=np.float64).reshape((-1, 7))
-    np.savez_compressed(target, states=states, q_values=q_values)
+    if target.suffix == ".npy":
+        table = np.empty(len(entries), dtype=[("states", np.int64, (16,)), ("q_values", np.float64, (7,))])
+        table["states"] = states
+        table["q_values"] = q_values
+        np.save(target, table, allow_pickle=False)
+    else:
+        np.savez_compressed(target, states=states, q_values=q_values)
     return target
+
+
+def evaluate_from_manifest(manifest_path: str | Path, suite_path: str | Path, output_path: str | Path) -> dict:
+    """Reproduce la suite usando exactamente el checkpoint declarado por manifiesto."""
+    manifest_file = Path(manifest_path)
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    required = {
+        "model_uri", "model_sha256", "config_uri", "config_sha256",
+        "normalization_uri", "normalization_sha256", "evaluation_suite_id",
+        "evaluation_suite_sha256", "environment_version",
+    }
+    missing = required.difference(manifest)
+    if missing:
+        raise ValueError(f"Faltan campos en manifiesto: {sorted(missing)}")
+    suite, _ = load_suite(suite_path)
+    if suite["evaluation_suite_id"] != manifest["evaluation_suite_id"]:
+        raise ValueError("El id de suite no coincide con el manifiesto")
+    if manifest.get("evaluation_suite_version", suite["version"]) != suite["version"]:
+        raise ValueError("La versión de suite no coincide con el manifiesto")
+    suite_sha256 = hashlib.sha256(Path(suite_path).resolve().read_bytes()).hexdigest()
+    if suite_sha256 != manifest["evaluation_suite_sha256"]:
+        raise ValueError("SHA-256 de la suite no coincide con el manifiesto")
+    if manifest["environment_version"] != ENVIRONMENT_VERSION:
+        raise ValueError("La environment_version actual no coincide con el manifiesto")
+    import mlflow
+
+    checkpoint_path = Path(mlflow.artifacts.download_artifacts(artifact_uri=manifest["model_uri"]))
+    checkpoint_sha256 = hashlib.sha256(checkpoint_path.read_bytes()).hexdigest()
+    if checkpoint_sha256 != manifest["model_sha256"]:
+        raise ValueError("SHA-256 del checkpoint no coincide con el manifiesto")
+    config_path = Path(mlflow.artifacts.download_artifacts(artifact_uri=manifest["config_uri"]))
+    config_sha256 = hashlib.sha256(config_path.read_bytes()).hexdigest()
+    if config_sha256 != manifest["config_sha256"]:
+        raise ValueError("SHA-256 de config.json no coincide con el manifiesto")
+    normalization_path = Path(mlflow.artifacts.download_artifacts(artifact_uri=manifest["normalization_uri"]))
+    normalization_sha256 = hashlib.sha256(normalization_path.read_bytes()).hexdigest()
+    if normalization_sha256 != manifest["normalization_sha256"]:
+        raise ValueError("SHA-256 de la discretización no coincide con el manifiesto")
+    return evaluate(suite_path, checkpoint_path, output_path)
 
 
 class RandomPolicy:
@@ -249,14 +301,9 @@ def evaluate(suite_path: str | Path, q_table_path: str | Path, output_path: str 
                 while not (terminated or truncated):
                     before_stage = environment.stage
                     carrying = environment.has_supply
-                    if reference == "q_learning_greedy":
-                        started = time.perf_counter()
-                        action = policy.act(observation, environment.config)
-                        elapsed = time.perf_counter() - started
-                    else:
-                        started = time.perf_counter()
-                        action = policy.act(observation, environment.config)
-                        elapsed = time.perf_counter() - started
+                    started = time.perf_counter()
+                    action = policy.act(observation, environment.config)
+                    elapsed = time.perf_counter() - started
                     latency_samples_s.append(elapsed)
                     total_latency_s += elapsed
                     if action == int(environment.config["actions"]["release_index"]) and before_stage == "delivery" and carrying and delivery_precision_m is None:
@@ -299,6 +346,7 @@ def evaluate(suite_path: str | Path, q_table_path: str | Path, output_path: str 
         "evaluation_suite_version": suite["version"],
         "split": suite["split"],
         "suite_config_path": str(resolved_suite_path.relative_to(PROJECT_ROOT)) if resolved_suite_path.is_relative_to(PROJECT_ROOT) else str(resolved_suite_path),
+        "evaluation_suite_sha256": hashlib.sha256(resolved_suite_path.read_bytes()).hexdigest(),
         "environment_version": ENVIRONMENT_VERSION,
         "seeds": seeds,
         "episodes_per_level": episode_count,

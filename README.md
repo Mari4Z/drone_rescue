@@ -50,12 +50,37 @@ documenta nombres de variables y valores de desarrollo no sensibles.
 Con el entorno virtual activo:
 
 ```bash
-python train.py
+python -m pipelines.train --profile configs/training/n1.yaml --seed 0
 ```
 
-El entrenamiento usa por defecto 20.000 episodios y semilla 0. Al terminar,
-imprime el primer éxito y una ruta greedy y muestra vistas ASCII. Para producir
-la imagen 3D estática:
+Los perfiles `configs/training/n1.yaml`, `n2.yaml` y `n3.yaml` fijan el nivel,
+hipótesis, presupuesto y semillas de evaluación greedy. Cada corrida crea un run
+MLflow, curvas separadas de entrenamiento y evaluación, checkpoint `.npy`,
+snapshot de configuración, evaluación pública y `manifests/<run_id>.json`. El
+checkpoint se registra además en el Model Registry.
+
+Para continuar desde un run exitoso:
+
+```bash
+python -m pipelines.train --profile configs/training/n1.yaml --seed 1 \
+  --parent-run-id <run_id>
+```
+
+El manifiesto permite volver a ejecutar la evaluación y verificar los SHA-256:
+
+```bash
+python - <<'PY'
+from pipelines.evaluate import evaluate_from_manifest
+
+evaluate_from_manifest(
+    "manifests/<run_id>.json",
+    "configs/evaluation_suite.yaml",
+    "artifacts/results/reproduccion-<run_id>.json",
+)
+PY
+```
+
+Para producir la imagen 3D estática:
 
 ```bash
 python plot3d.py
@@ -69,18 +94,8 @@ Para abrir la ventana interactiva de Matplotlib:
 python plot3d.py --show
 ```
 
-El entrenamiento actual no guarda una Q-table ni envía sus métricas a MLflow.
-MLflow se incluye para registrar y reproducir cambios, pero falta instrumentar
-`train.py` y habilitar el versionado y recuperación de modelos.
-
-## Reproducir el entrenamiento actual
-
-1. Usa el commit de código deseado y crea el entorno con `requirements.txt`.
-2. Ejecuta `python train.py`; `train()` fija la semilla inicial en 0.
-3. Conserva el commit, la salida de consola y cualquier artefacto generado como
-   evidencia. La corrida actual no registra métricas de entrenamiento en
-   MLflow; ese flujo aún debe implementarse para obtener un run reproducible
-   desde `train.py`.
+El evaluador usa la suite pública fija `drone-rescue-public-validation`; el set
+final reservado debe mantenerse fuera del repositorio.
 
 Para iniciar el seguimiento de datos grandes con DVC, agrega las salidas reales
 cuando existan:
@@ -98,13 +113,14 @@ No se ha configurado un remoto en esta rama.
 - `envs/`: entorno Gymnasium canónico y reglas físicas de la simulación.
 - `agents/`: agente Q-learning tabular.
 - `env/` y `agent/`: adaptadores para preservar imports históricos.
-- `train.py`: bucle de entrenamiento y recorrido greedy.
+- `pipelines/train.py`: entrenamiento MLflow, evaluación greedy, checkpoint,
+  Model Registry y manifiesto; `train.py` conserva la ruta CLI anterior.
 - `visualize.py`, `plot3d.py`: vistas de depuración y visualización estática.
 - `configs/`: configuración YAML efectiva del ambiente y recompensa.
-- `pipelines/`: reservado para orquestación Prefect.
+- `pipelines/`: entrenamiento y evaluación; Prefect todavía está pendiente.
 - `tests/`: pruebas del contrato actual del entorno e imports.
 - `web/`: reservado para Vite, TypeScript, Three.js y Vercel.
-- `manifests/`: plantilla de manifiesto para modelos y corridas.
+- `manifests/`: manifiestos por run con hashes, URIs y runtime.
 - `artifacts/`: destinos DVC para Q-tables, suites y resultados.
 - `docs/`: auditoría y documentación técnica.
 

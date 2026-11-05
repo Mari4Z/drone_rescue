@@ -1,0 +1,16 @@
+experiment:
+  id: n3-viento
+  hypothesis: "Una política que compensa viento horizontal variable puede completar N3 sin perder la reserva de regreso."
+level:
+  id: N3
+  config: configs/levels/n3_operacion_exigente.yaml
+training:
+  episodes: 15000
+  evaluation_interval: 500
+  evaluation_seeds: [101, 211, 307, 401, 503]
+  agent:
+    alpha: 0.2
+    gamma: 0.99
+    epsilon_start: 1.0
+    epsilon_min: 0.05
+    epsilon_decay: 0.9995
