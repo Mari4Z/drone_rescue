@@ -11,8 +11,8 @@ explícita de su observación. La especificación está en
 - Python 3.12 o posterior. La instalación de dependencias se validó en Python
   3.14.4; Python 3.12 es la versión objetivo para desarrollo reproducible.
 - Git.
-- Node.js LTS será necesario cuando se implemente la aplicación web; aún no se
-  necesita para entrenar el agente.
+- Node.js LTS y npm para desarrollar o compilar `web/`; no se necesitan para
+  entrenar el agente.
 
 ## Instalación
 
@@ -117,7 +117,9 @@ física al cliente. Con las dependencias instaladas, inicia Uvicorn localmente:
 python -m api.main
 ```
 
-`GET /catalog` combina runs de MLflow con manifiestos locales. `POST /load`
+`GET /catalog` combina runs de MLflow con manifiestos locales, métricas,
+semillas, duración, pasos, versiones de modelo y diferencias de configuración
+contra `configs/drone_rescue.yaml`. `POST /load`
 acepta `{"run_id": "<run_id>"}` y verifica los SHA-256 del modelo, la
 configuración y la normalización antes de activar la Q-table junto con el
 ambiente resuelto original. `POST /evaluate` ejecuta la suite pública fijada
@@ -151,13 +153,13 @@ accesibles desde el servidor.
 - `configs/`: configuración YAML efectiva del ambiente y recompensa.
 - `pipelines/`: entrenamiento y evaluación; Prefect todavía está pendiente.
 - `tests/`: pruebas del contrato actual del entorno e imports.
-- `web/`: reservado para Vite, TypeScript, Three.js y Vercel.
+- `web/`: aplicación Vite, TypeScript y Three.js desplegable en Vercel.
 - `manifests/`: manifiestos por run con hashes, URIs y runtime.
 - `artifacts/`: destinos DVC para Q-tables, suites y resultados.
 - `docs/`: auditoría y documentación técnica.
 
-La simulación Python es la autoridad para estados y transiciones. La futura
-interfaz Three.js solo deberá representar el estado comunicado por la API; la
+La simulación Python es la autoridad para estados y transiciones. La interfaz
+Three.js solo representa el estado comunicado por la API; la
 velocidad de animación no modificará el paso físico.
 
 ## Pruebas

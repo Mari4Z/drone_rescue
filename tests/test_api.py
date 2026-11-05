@@ -21,7 +21,10 @@ def api_client(tmp_path, monkeypatch):
 
     environment = api.DroneEnv()
     resolved_config = environment.config
-    resolved_config["experiment"] = {"model_family": "drone-rescue-v2"}
+    resolved_config["experiment"] = {
+        "model_family": "drone-rescue-v2",
+        "changed_dimension": "world.obstacles",
+    }
     resolved_config["world"]["obstacles"] = [
         {"min_m": [30.0, 30.0, 0.0], "max_m": [35.0, 35.0, 10.0]}
     ]
@@ -29,6 +32,7 @@ def api_client(tmp_path, monkeypatch):
     config_path = tmp_path / "config.json"
     normalization_path = tmp_path / "normalization.json"
     q_table_path = tmp_path / "q_table.npy"
+    evaluation_path = tmp_path / "evaluation.json"
     config_path.write_text(json.dumps({"environment": resolved_config}), encoding="utf-8")
     normalization_path.write_text(json.dumps({
         "action_dimensions": 7,
@@ -39,10 +43,17 @@ def api_client(tmp_path, monkeypatch):
     }), encoding="utf-8")
     table = np.empty(0, dtype=[("states", np.int64, (16,)), ("q_values", np.float64, (7,))])
     np.save(q_table_path, table, allow_pickle=False)
+    evaluation_path.write_text(json.dumps({
+        "cases": [
+            {"metrics": {"mean_steps": 12.0}},
+            {"metrics": {"mean_steps": 8.0}},
+        ],
+    }), encoding="utf-8")
     artifact_paths = {
         "model": q_table_path,
         "config": config_path,
         "normalization": normalization_path,
+        "evaluation": evaluation_path,
     }
     manifest = {
         "run_id": RUN_ID,
@@ -51,6 +62,9 @@ def api_client(tmp_path, monkeypatch):
         "environment_version": api.ENVIRONMENT_VERSION,
         "evaluation_suite_id": "drone-rescue-finalists-public",
         "evaluation_suite_version": "1.0.0",
+        "registry_version": "3",
+        "evaluation_uri": "test:/evaluation",
+        "evaluation_sha256": hashlib.sha256(evaluation_path.read_bytes()).hexdigest(),
         "evaluation_suite_sha256": hashlib.sha256(
             api.EVALUATION_SUITE_PATH.read_bytes()
         ).hexdigest(),
@@ -61,7 +75,10 @@ def api_client(tmp_path, monkeypatch):
     (tmp_path / "manifests" / f"{RUN_ID}.json").write_text(json.dumps(manifest), encoding="utf-8")
 
     def download_artifact(artifact_uri):
-        return str(artifact_paths[artifact_uri.rsplit("/", 1)[-1]])
+        artifact_name = artifact_uri.rsplit("/", 1)[-1]
+        if artifact_uri.endswith("/evaluation/evaluacion.json"):
+            return str(artifact_paths["evaluation"])
+        return str(artifact_paths[artifact_name])
 
     monkeypatch.setattr(api.mlflow.artifacts, "download_artifacts", download_artifact)
     return TestClient(api._create_app(production=False, cors_origins=[]))
@@ -88,9 +105,12 @@ def test_catalog_joins_mlflow_runs_and_manifests(api_client, monkeypatch):
         run_id = RUN_ID
         status = "FINISHED"
         experiment_id = "1"
+        start_time = 1_000
+        end_time = 2_500
 
     class RunData:
         tags = {"hypothesis": "test hypothesis", "git_commit": "abc123", "level_id": "N1"}
+        params = {"seed": "17", "episodes": "500", "experiment_id": "exp-001"}
         metrics = {"success_rate": 0.5}
 
     class Run:
@@ -120,10 +140,23 @@ def test_catalog_joins_mlflow_runs_and_manifests(api_client, monkeypatch):
     assert run["hypothesis"] == "test hypothesis"
     assert run["commit"] == "abc123"
     assert run["level"] == "N1"
+    assert run["experiment_id"] == "exp-001"
+    assert run["mlflow_experiment"] == "test"
     assert run["metrics"] == {"success_rate": 0.5}
     assert run["manifest_available"] is True
     assert run["mlflow_link"] is None
     assert run["mlflow_run_uri"] == f"runs:/{RUN_ID}"
+    assert run["seed"] == 17
+    assert run["training_episodes"] == 500
+    assert run["duration_seconds"] == 1.5
+    assert run["mean_steps"] == 10.0
+    assert run["environment_version"] == api.ENVIRONMENT_VERSION
+    assert run["model_version"] == "3"
+    assert run["model_available"] is True
+    assert run["changed_dimension"] == "world.obstacles"
+    assert {change["path"] for change in run["changes_vs_baseline"]} == {"world.obstacles"}
+    assert run["config_error"] is None
+    assert run["evaluation_error"] is None
 
 
 def test_load_returns_active_model_environment_and_config(api_client):

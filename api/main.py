@@ -25,7 +25,7 @@ from mlflow import MlflowClient
 from mlflow.exceptions import MlflowException
 from pydantic import BaseModel, Field
 
-from envs.drone_env import ENVIRONMENT_VERSION, DroneEnv
+from envs.drone_env import DEFAULT_CONFIG_PATH, ENVIRONMENT_VERSION, DroneEnv, load_config
 from pipelines.evaluate import (
     QLearningPolicy,
     RulePolicy,
@@ -211,6 +211,82 @@ def _mlflow_link(tracking_uri: str, experiment_id: str, run_id: str) -> str | No
     return None
 
 
+def _configuration_changes(baseline: dict, resolved: dict) -> list[dict]:
+    changes = []
+
+    def compare(base_value, run_value, prefix: str) -> None:
+        if isinstance(base_value, dict) and isinstance(run_value, dict):
+            for key in sorted(base_value.keys() | run_value.keys()):
+                if not prefix and key in {"experiment", "level"}:
+                    continue
+                child_path = f"{prefix}.{key}" if prefix else key
+                if key not in base_value:
+                    changes.append({"path": child_path, "baseline": None, "run": run_value[key]})
+                elif key not in run_value:
+                    changes.append({"path": child_path, "baseline": base_value[key], "run": None})
+                else:
+                    compare(base_value[key], run_value[key], child_path)
+        elif base_value != run_value:
+            changes.append({"path": prefix, "baseline": base_value, "run": run_value})
+
+    compare(baseline, resolved, "")
+    return changes
+
+
+def _catalog_artifacts(run_id: str, manifest: dict, baseline_config: dict) -> dict:
+    details = {
+        "changed_dimension": None,
+        "changes_vs_baseline": None,
+        "mean_steps": None,
+        "config_error": None,
+        "evaluation_error": None,
+    }
+    config_uri = manifest.get("config_uri")
+    if config_uri:
+        try:
+            config_path = Path(mlflow.artifacts.download_artifacts(artifact_uri=config_uri))
+            if manifest.get("config_sha256") and _sha256(config_path) != manifest["config_sha256"]:
+                raise ValueError("SHA-256 de config.json no coincide con el manifiesto")
+            config_document = json.loads(config_path.read_text(encoding="utf-8"))
+            environment_config = config_document.get("environment")
+            if not isinstance(environment_config, dict):
+                raise ValueError("config.json no contiene el ambiente resuelto")
+            details["changes_vs_baseline"] = _configuration_changes(baseline_config, environment_config)
+            experiment = environment_config.get("experiment", {})
+            if isinstance(experiment, dict):
+                details["changed_dimension"] = experiment.get("changed_dimension")
+        except (MlflowException, FileNotFoundError, OSError, json.JSONDecodeError, ValueError, AttributeError) as error:
+            details["config_error"] = f"No se pudo validar la configuración de MLflow: {error}"
+
+    if manifest.get("model_sha256"):
+        try:
+            evaluation_uri = manifest.get(
+                "evaluation_uri",
+                f"runs:/{run_id}/evaluation/evaluacion.json",
+            )
+            evaluation_path = Path(mlflow.artifacts.download_artifacts(artifact_uri=evaluation_uri))
+            if manifest.get("evaluation_sha256") and _sha256(evaluation_path) != manifest["evaluation_sha256"]:
+                raise ValueError("SHA-256 de evaluacion.json no coincide con el manifiesto")
+            evaluation = json.loads(evaluation_path.read_text(encoding="utf-8"))
+            case_steps = [
+                case.get("metrics", {}).get("mean_steps")
+                for case in evaluation.get("cases", [])
+                if isinstance(case.get("metrics", {}).get("mean_steps"), (int, float))
+            ]
+            if case_steps:
+                details["mean_steps"] = float(sum(case_steps) / len(case_steps))
+        except (MlflowException, FileNotFoundError, OSError, json.JSONDecodeError, ValueError, AttributeError) as error:
+            details["evaluation_error"] = f"No se pudo leer la evaluación registrada en MLflow: {error}"
+    return details
+
+
+def _optional_int(value) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _create_app(*, production: bool | None = None, cors_origins: list[str] | None = None) -> FastAPI:
     production = (
         os.getenv("DRONE_RESCUE_ENV", "development").lower() == "production"
@@ -222,7 +298,11 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
         cors_origins = (
             [origin.strip() for origin in configured_origins.split(",") if origin.strip()]
             if configured_origins is not None
-            else ([] if production else ["http://localhost:5173", "http://localhost:3000"])
+            else (
+                []
+                if production
+                else ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"]
+            )
         )
     if production and any(urlparse(origin).scheme != "https" for origin in cors_origins):
         raise RuntimeError("En producción, todos los orígenes CORS deben usar HTTPS")
@@ -262,6 +342,10 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
     @application.get("/catalog")
     def catalog():
         manifests = _catalog_manifest_map()
+        try:
+            baseline_config = load_config(DEFAULT_CONFIG_PATH)
+        except (OSError, ValueError) as error:
+            raise HTTPException(status_code=503, detail=f"No se pudo cargar el baseline: {error}") from error
         client = MlflowClient()
         try:
             experiments = client.search_experiments()
@@ -281,6 +365,11 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
                         run_id = run.info.run_id
                         manifest = manifests.get(run_id, {})
                         tags = run.data.tags
+                        params = run.data.params
+                        artifact_details = _catalog_artifacts(run_id, manifest, baseline_config)
+                        duration_seconds = None
+                        if run.info.start_time is not None and run.info.end_time is not None:
+                            duration_seconds = max(0.0, (run.info.end_time - run.info.start_time) / 1000.0)
                         entries.append({
                             "run_id": run_id,
                             "status": run.info.status,
@@ -288,6 +377,19 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
                             "hypothesis": tags.get("hypothesis"),
                             "commit": tags.get("git_commit") or manifest.get("git_commit"),
                             "level": tags.get("level_id") or manifest.get("level_id"),
+                            "experiment_id": params.get("experiment_id") or tags.get("level_id") or manifest.get("level_id"),
+                            "mlflow_experiment": experiment_names.get(run.info.experiment_id),
+                            "environment_version": tags.get("environment_version") or manifest.get("environment_version"),
+                            "seed": manifest.get("seed", _optional_int(params.get("seed"))),
+                            "training_episodes": _optional_int(params.get("episodes")),
+                            "mean_steps": artifact_details["mean_steps"],
+                            "duration_seconds": duration_seconds,
+                            "model_version": manifest.get("registry_version"),
+                            "model_available": bool(manifest.get("model_uri") and manifest.get("model_sha256")),
+                            "changed_dimension": artifact_details["changed_dimension"],
+                            "changes_vs_baseline": artifact_details["changes_vs_baseline"],
+                            "config_error": artifact_details["config_error"],
+                            "evaluation_error": artifact_details["evaluation_error"],
                             "metrics": dict(run.data.metrics),
                             "experiment": experiment_names.get(run.info.experiment_id),
                             "manifest_available": bool(manifest),
