@@ -39,3 +39,4 @@ drone_route*.png
 .DS_Store
 models/
 drone_view*.html
+.vercel/
