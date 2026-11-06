@@ -54,6 +54,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
       headers: {
         Accept: "application/json",
+        // ngrok responde con una página HTML de aviso si no se indica esto; otros servidores lo ignoran
+        "ngrok-skip-browser-warning": "1",
         ...(init?.body ? { "Content-Type": "application/json" } : {}),
         ...init?.headers,
       },

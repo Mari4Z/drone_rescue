@@ -405,7 +405,7 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
             allow_origins=cors_origins,
             allow_credentials=False,
             allow_methods=["GET", "POST"],
-            allow_headers=["Content-Type"],
+            allow_headers=["Content-Type", "ngrok-skip-browser-warning"],
         )
 
     @application.middleware("http")

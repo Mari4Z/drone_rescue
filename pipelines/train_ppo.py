@@ -199,7 +199,8 @@ def train_run(
 ) -> dict:
     profile, profile_file = load_ppo_profile(profile_path)
     git_commit = _git("rev-parse", "HEAD")
-    dirty = bool(_git("status", "--porcelain"))
+    # Las salidas de runs anteriores no cambian el código que se ejecuta
+    dirty = bool(_git("status", "--porcelain", "--", ".", ":!manifests", ":!artifacts"))
     if dirty and not allow_dirty:
         raise RuntimeError("Hay cambios sin commit: el run no identificaría el código. Haz commit o usa --allow-dirty")
     training = dict(profile["training"])
