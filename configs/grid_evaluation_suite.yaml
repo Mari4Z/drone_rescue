@@ -1,0 +1,7 @@
+# Suite de la familia grid-drone-v1. No es comparable con la de drone-rescue-v2.
+evaluation_suite_id: grid-drone-public
+version: 1.0.0
+split: public_validation
+first_seed: 500000
+episodes_per_map_set: 500
+environments: [DroneRescueGridRandom-v2, DroneRescueGridFixed-v2]

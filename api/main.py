@@ -442,6 +442,16 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
         return {"api_version": API_VERSION, "environment_version": ENVIRONMENT_VERSION,
                 "git_commit": commit, "served_model": served}
 
+    @application.get("/recommended")
+    def recommended():
+        """Modelo publicado vigente por nivel e historial; registrar un candidato no lo promueve."""
+        levels = {}
+        directory = MANIFEST_DIR / "published"
+        for level in sorted(path.name for path in directory.iterdir() if path.is_dir()) if directory.is_dir() else []:
+            versions = [json.loads(path.read_text(encoding="utf-8")) for path in sorted((directory / level).glob("v*.json"))]
+            levels[level] = {"current": versions[-1], "history": versions}
+        return {"levels": levels}
+
     @application.get("/training")
     def training_status():
         with runtime.lock:
@@ -522,7 +532,10 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
                             "mean_steps": artifact_details["mean_steps"],
                             "duration_seconds": duration_seconds,
                             "model_version": manifest.get("registry_version"),
-                            "model_available": bool(manifest.get("model_uri") and manifest.get("model_sha256")),
+                            "model_available": bool(
+                                manifest.get("model_uri") and manifest.get("model_sha256")
+                                and manifest.get("provenance") != "historico"
+                            ),
                             "changed_dimension": artifact_details["changed_dimension"],
                             "changes_vs_baseline": artifact_details["changes_vs_baseline"],
                             "config_error": artifact_details["config_error"],

@@ -148,6 +148,7 @@ app.innerHTML = `
                 `).join("")}
               </div>
             </div>
+            <button class="button button-secondary auto-play" id="auto-play" type="button" disabled hidden>▶ Reproducir episodio</button>
             <div class="training-notice" id="mode-notice">Elige un run compatible en el catálogo para comenzar.</div>
           </section>
 
@@ -242,6 +243,9 @@ function setBusy(busy: boolean): void {
   });
   element<HTMLButtonElement>("#reset-episode").disabled = busy || !activeLoad;
   element<HTMLButtonElement>("#evaluate-model").disabled = busy || !activeLoad;
+  const autoPlayButton = element<HTMLButtonElement>("#auto-play");
+  autoPlayButton.hidden = currentMode === "manual";
+  autoPlayButton.disabled = !activeLoad || Boolean(episode?.terminated || episode?.truncated);
   modeSelect.disabled = busy || !activeLoad;
 }
 
@@ -466,6 +470,25 @@ async function loadSelectedRun(run: CatalogRun, seed = run.seed ?? 0, link?: Epi
   }
 }
 
+// Avanza el episodio paso a paso en los modos donde la política elige la acción.
+// El ritmo solo afecta a la animación: cada paso sigue siendo una transición de la API.
+const AUTO_PLAY_MS = 120;
+let autoPlaying = false;
+
+function setAutoPlay(playing: boolean): void {
+  autoPlaying = playing;
+  element("#auto-play").textContent = playing ? "⏸ Pausar" : "▶ Reproducir episodio";
+}
+
+async function autoPlayLoop(): Promise<void> {
+  while (autoPlaying && activeLoad && currentMode !== "manual" && !episode?.terminated && !episode?.truncated) {
+    await advanceEpisode();
+    if (document.querySelector("#error-banner:not([hidden])")) break;
+    await new Promise((resolve) => window.setTimeout(resolve, AUTO_PLAY_MS));
+  }
+  setAutoPlay(false);
+}
+
 function modeNotice(mode: EpisodeMode): string {
   if (mode === "manual") return "Cada acción manual avanza exactamente un paso del ambiente.";
   if (mode === "evaluacion") return "Modelo congelado, sin exploración.";
@@ -529,6 +552,7 @@ async function launchTraining(): Promise<void> {
 
 async function changeMode(mode: EpisodeMode): Promise<void> {
   if (!activeLoad) return;
+  setAutoPlay(false);
   clearError();
   setBusy(true);
   try {
@@ -683,6 +707,14 @@ element<HTMLButtonElement>("#evaluate-model").addEventListener("click", () => {
   void runEvaluation();
 });
 element<HTMLButtonElement>("#start-training").addEventListener("click", () => void launchTraining());
+element<HTMLButtonElement>("#auto-play").addEventListener("click", () => {
+  if (autoPlaying) {
+    setAutoPlay(false);
+    return;
+  }
+  setAutoPlay(true);
+  void autoPlayLoop();
+});
 element<HTMLButtonElement>("#compare-runs").addEventListener("click", renderComparison);
 element<HTMLButtonElement>("#refresh-catalog").addEventListener("click", () => void refreshCatalog());
 element<HTMLButtonElement>("#dismiss-error").addEventListener("click", clearError);

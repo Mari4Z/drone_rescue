@@ -82,6 +82,7 @@ h1 { margin-bottom: 7px; font-size: clamp(29px, 3vw, 39px); line-height: 1.12; l
 .meter[data-level="mid"] i { background: var(--amber); }
 .meter[data-level="low"] i { background: var(--red); }
 .control-column { display: grid; gap: 13px; }
+.auto-play { width: 100%; justify-content: center; margin-bottom: 10px; }
 .training-help { margin: 12px 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .training-help code { font: 10px var(--mono); }
 .training-form { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }

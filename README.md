@@ -165,7 +165,7 @@ python cli.py run --model models/grid_dqn.pt --web
   Model Registry y manifiesto; `train.py` conserva la ruta CLI anterior.
 - `visualize.py`, `plot3d.py`: vistas de depuración y visualización estática.
 - `configs/`: configuración YAML efectiva del ambiente y recompensa.
-- `pipelines/`: entrenamiento y evaluación; Prefect todavía está pendiente.
+- `pipelines/`, `dags/`: entrenamiento, evaluación y etapas del pipeline, orquestadas con Airflow.
 - `tests/`: pruebas del contrato actual del entorno e imports.
 - `web/`: aplicación Vite, TypeScript y Three.js desplegable en Vercel.
 - `manifests/`: manifiestos por run con hashes, URIs y runtime.
@@ -175,6 +175,15 @@ python cli.py run --model models/grid_dqn.pt --web
 La simulación Python es la autoridad para estados y transiciones. La interfaz
 Three.js solo representa el estado comunicado por la API; la
 velocidad de animación no modificará el paso físico.
+
+## PPO y versionamiento
+
+El agente de referencia es PPO con la familia `drone-rescue-v3`: el agente ordena velocidades objetivo y un estabilizador aplica las fuerzas. Qué se versiona, dónde y cómo reproducirlo está en [`docs/versionamiento.md`](docs/versionamiento.md); la skill `.claude/skills/versionar` resume los pasos.
+
+```bash
+export MLFLOW_TRACKING_URI=sqlite:///artifacts/mlflow/mlflow.db
+.venv/bin/python -m pipelines.train_ppo --profile configs/training/ppo_v3_n1.yaml --seed 11
+```
 
 ## Pruebas
 

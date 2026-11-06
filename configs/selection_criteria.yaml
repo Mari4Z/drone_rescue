@@ -1,0 +1,9 @@
+# Criterios fijados antes de ver resultados. Un candidato se publica solo si cumple todos.
+# Se miden en el caso de la suite que corresponde al nivel del modelo. El retorno no interviene.
+version: 1.0.0
+min_success_rate:
+  N1: 0.8
+  N2: 0.8
+  N3: 0.7   # con viento: la semilla cambia el episodio, no se espera 100 %
+max_mean_steps: 700
+no_regression: true  # no publicar si tiene menos éxito que el modelo vigente; a igual éxito, más pasos

@@ -305,6 +305,16 @@ def test_training_is_disabled_in_production_by_default(monkeypatch):
     assert client.post("/training", json={"profile": "ppo_v3_n1"}).status_code == 403
 
 
+def test_recommended_lists_published_versions(api_client, tmp_path):
+    assert api_client.get("/recommended").json() == {"levels": {}}
+    level = tmp_path / "manifests" / "published" / "N1"
+    level.mkdir(parents=True)
+    (level / "v0001.json").write_text(json.dumps({"publication_version": 1, "run_id": "a"}), encoding="utf-8")
+    (level / "v0002.json").write_text(json.dumps({"publication_version": 2, "run_id": "b"}), encoding="utf-8")
+    payload = api_client.get("/recommended").json()["levels"]["N1"]
+    assert payload["current"]["run_id"] == "b" and len(payload["history"]) == 2
+
+
 def test_version_reports_commit_and_served_model(api_client):
     _load(api_client)
     payload = api_client.get("/version").json()
