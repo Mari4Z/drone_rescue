@@ -16,6 +16,10 @@ import type {
   LoadResponse,
 } from "./types";
 
+// Carga visual inicial de la barra de puntos: puntos = POINTS_START + retorno del episodio.
+// No forma parte de la recompensa, que sigue calculándose solo en el ambiente Python.
+const POINTS_START = 100;
+
 const modes: EpisodeMode[] = [
   "manual",
   "aleatorio",
@@ -107,8 +111,8 @@ app.innerHTML = `
           <div class="telemetry-grid">
             <article class="telemetry-card"><span>EPISODIO · SEMILLA</span><strong id="episode-number">—</strong><small id="episode-steps">pasos del ambiente</small></article>
             <article class="telemetry-card"><span>ETAPA</span><strong id="episode-stage">—</strong><small id="supply-state">Sin carga</small></article>
-            <article class="telemetry-card"><span>RECOMPENSA</span><strong id="episode-reward">0.00</strong><small>última transición</small></article>
-            <article class="telemetry-card"><span>BATERÍA</span><strong id="episode-battery">—</strong><small id="episode-contacts">0 contactos</small></article>
+            <article class="telemetry-card"><span>PUNTOS</span><strong id="episode-points">—</strong><div class="meter" id="points-meter" role="meter" aria-label="Puntos del episodio" aria-valuemin="0" aria-valuemax="100"><i></i></div><small id="episode-reward">inicia en ${POINTS_START}; es solo visual</small></article>
+            <article class="telemetry-card"><span>BATERÍA</span><strong id="episode-battery">—</strong><div class="meter" id="battery-meter" role="meter" aria-label="Batería restante" aria-valuemin="0" aria-valuemax="100"><i></i></div><small id="episode-contacts">0 contactos</small></article>
           </div>
         </div>
 
@@ -319,6 +323,16 @@ function updateSelectionControls(): void {
   element<HTMLButtonElement>("#compare-runs").disabled = count < 2;
 }
 
+// Mismo medidor para puntos y batería. Los bonos pueden pasar de 100 pts: la barra se
+// queda llena y el número muestra el valor real.
+function setMeter(selector: string, fraction: number): void {
+  const percent = Math.round(Math.min(1, Math.max(0, fraction)) * 100);
+  const meter = element<HTMLElement>(selector);
+  meter.setAttribute("aria-valuenow", String(percent));
+  meter.dataset.level = percent > 50 ? "high" : percent > 20 ? "mid" : "low";
+  element<HTMLElement>(`${selector} i`).style.width = `${percent}%`;
+}
+
 function updateEpisodeView(state: EpisodeState): void {
   episode = state;
   currentMode = state.mode;
@@ -331,7 +345,11 @@ function updateEpisodeView(state: EpisodeState): void {
     ? state.cause || "terminado"
     : state.telemetry.stage;
   element("#supply-state").textContent = state.telemetry.has_supply ? "Suministro a bordo" : "Sin carga";
-  element("#episode-reward").textContent = formatNumber(state.reward);
+  const points = POINTS_START + state.episode_return;
+  element("#episode-points").textContent = `${formatNumber(points, 1)} pts`;
+  setMeter("#points-meter", points / POINTS_START);
+  element("#episode-reward").textContent = `retorno ${formatNumber(state.episode_return)} · último paso ${formatNumber(state.reward)}`;
+  setMeter("#battery-meter", state.telemetry.battery_fraction);
   element("#episode-battery").textContent = `${formatNumber(state.telemetry.battery_wh, 1)} Wh`;
   element("#episode-contacts").textContent = `${state.telemetry.contacts} contacto${state.telemetry.contacts === 1 ? "" : "s"}`;
   element("#failure-cause").textContent = state.cause || (state.terminated || state.truncated ? "Terminado" : "Sin fallo");

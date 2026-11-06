@@ -95,6 +95,7 @@ export interface EpisodeState {
     environment_version: string;
   };
   reward: number;
+  episode_return: number;
   cause: string | null;
   terminated: boolean;
   truncated: boolean;

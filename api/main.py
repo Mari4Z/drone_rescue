@@ -66,6 +66,7 @@ class ActiveRun:
     mode: str = "manual"
     observation: np.ndarray | None = None
     reward: float = 0.0
+    episode_return: float = 0.0
     cause: str | None = None
     terminated: bool = False
     truncated: bool = False
@@ -177,6 +178,7 @@ def _episode_payload(active: ActiveRun) -> dict:
             "environment_version": environment.environment_version,
         },
         "reward": float(active.reward),
+        "episode_return": float(active.episode_return),
         "cause": active.cause,
         "terminated": active.terminated,
         "truncated": active.truncated,
@@ -526,6 +528,7 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
             active.mode = request.mode
             active.observation, _ = active.environment.reset(seed=request.seed)
             active.reward = 0.0
+            active.episode_return = 0.0
             active.cause = None
             active.terminated = False
             active.truncated = False
@@ -567,6 +570,7 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
             next_observation, reward, terminated, truncated, info = active.environment.step(selected_action)
             active.observation = next_observation
             active.reward = float(reward)
+            active.episode_return += float(reward)
             active.cause = info["cause"]
             active.terminated = bool(terminated)
             active.truncated = bool(truncated)

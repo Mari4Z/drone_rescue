@@ -217,6 +217,18 @@ def test_episode_manual_step_reports_state_telemetry_reward_cause_and_mode(api_c
     assert payload["telemetry"]["steps"] == 1
 
 
+def test_episode_return_accumulates_and_resets(api_client):
+    _load(api_client)
+    start = api_client.post("/episode/reset", json={"mode": "manual", "seed": 7}).json()
+    assert start["episode_return"] == 0.0
+    total = 0.0
+    for _ in range(3):
+        payload = api_client.get("/episode/step", params={"action": 4}).json()
+        total += payload["reward"]
+        assert payload["episode_return"] == pytest.approx(total)
+    assert api_client.post("/episode/reset", json={"mode": "manual", "seed": 7}).json()["episode_return"] == 0.0
+
+
 def test_episode_reset_random_and_reference_modes(api_client):
     _load(api_client)
     random_response = api_client.post("/episode/reset", json={"mode": "aleatorio", "seed": 7})
