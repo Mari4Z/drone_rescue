@@ -6,7 +6,10 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +28,8 @@ from mlflow import MlflowClient
 from mlflow.exceptions import MlflowException
 from pydantic import BaseModel, Field
 
+from agents.dqn import FEATURES_VERSION, make_features
+from agents.ppo import PPOPolicy, input_contract, make_env
 from envs.drone_env import DEFAULT_CONFIG_PATH, ENVIRONMENT_VERSION, DroneEnv, load_config
 from pipelines.evaluate import (
     QLearningPolicy,
@@ -34,7 +39,13 @@ from pipelines.evaluate import (
     load_suite,
 )
 
+from pipelines.tracking import configure_tracking
+from pipelines.train_ppo import evaluate_model as evaluate_ppo
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+TRAINING_PROFILE_DIR = PROJECT_ROOT / "configs" / "training"
+TRAINING_MAX_TIMESTEPS = int(os.getenv("DRONE_RESCUE_TRAINING_MAX_TIMESTEPS", "300000"))
+EXPLORATION_EPSILON = 0.1  # modo entrenamiento con Q-table: acción aleatoria con esta probabilidad
 MANIFEST_DIR = Path(os.getenv("DRONE_RESCUE_MANIFEST_DIR", PROJECT_ROOT / "manifests")).resolve()
 EVALUATION_SUITE_PATH = Path(
     os.getenv("DRONE_RESCUE_EVALUATION_SUITE", PROJECT_ROOT / "configs" / "finalist_evaluation_suite.yaml")
@@ -54,6 +65,12 @@ class ResetRequest(BaseModel):
     seed: int | None = None
 
 
+class TrainingRequest(BaseModel):
+    profile: str = Field(pattern=r"^ppo_[A-Za-z0-9_-]+$")
+    seed: int = 0
+    timesteps: int = Field(default=50_000, gt=0)
+
+
 @dataclass
 class ActiveRun:
     run_id: str
@@ -63,6 +80,9 @@ class ActiveRun:
     environment: DroneEnv
     q_table: dict
     temporary_directory: tempfile.TemporaryDirectory
+    ppo_policy: PPOPolicy | None = None
+    stabilized_env: object | None = None  # ambiente de la familia del modelo; comparte estado con environment
+    model_family: str = "drone-rescue-v2"
     mode: str = "manual"
     observation: np.ndarray | None = None
     reward: float = 0.0
@@ -76,6 +96,7 @@ class ApiRuntime:
     def __init__(self) -> None:
         self.active: ActiveRun | None = None
         self.lock = RLock()
+        self.training: dict | None = None
 
     def require_active(self) -> ActiveRun:
         if self.active is None:
@@ -126,6 +147,69 @@ def _verified_artifact(manifest: dict, uri_field: str, hash_field: str, director
     return target
 
 
+def _validate_ppo_compatibility(manifest: dict, normalization: dict) -> None:
+    if manifest.get("environment_version") != ENVIRONMENT_VERSION:
+        raise HTTPException(status_code=409, detail="El modelo requiere otra environment_version")
+    family = manifest.get("model_family")
+    if family not in ("drone-rescue-v2", "drone-rescue-v3"):
+        raise HTTPException(status_code=409, detail=f"Familia de modelo no soportada: {family!r}")
+    if normalization != input_contract(family):
+        raise HTTPException(status_code=409, detail="El contrato de entrada/salida no coincide con esta API")
+    if normalization.get("features_version") != FEATURES_VERSION:
+        raise HTTPException(status_code=409, detail="El escalado de entradas del modelo no coincide")
+
+
+def _suite_for_manifest(manifest: dict) -> tuple[dict, Path]:
+    """La suite con la que se registró el modelo, verificada por id, versión y SHA-256."""
+    candidates = [EVALUATION_SUITE_PATH, *sorted((PROJECT_ROOT / "configs").glob("*evaluation_suite.yaml"))]
+    for candidate in candidates:
+        try:
+            suite, path = load_suite(candidate)
+        except (OSError, ValueError):
+            continue
+        if (
+            suite["evaluation_suite_id"] == manifest.get("evaluation_suite_id")
+            and suite["version"] == manifest.get("evaluation_suite_version")
+            and _sha256(path) == manifest.get("evaluation_suite_sha256")
+        ):
+            return suite, path
+    raise HTTPException(status_code=409, detail="Ninguna suite disponible coincide con la del manifiesto")
+
+
+def _training_state() -> dict:
+    job = runtime.training
+    profiles = sorted(path.stem for path in TRAINING_PROFILE_DIR.glob("ppo_*.yaml"))
+    base = {"profiles": profiles, "max_timesteps": TRAINING_MAX_TIMESTEPS, "state": "idle"}
+    if job is None:
+        return base
+    code = job["process"].poll()
+    log_text = Path(job["log"]).read_text(encoding="utf-8", errors="replace") if Path(job["log"]).exists() else ""
+    progress = {}
+    if Path(job["status"]).exists():
+        try:
+            progress = json.loads(Path(job["status"]).read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            progress = {}
+    run_id = None
+    for line in reversed(log_text.splitlines()):
+        if line.startswith('{"run_id"'):
+            run_id = json.loads(line)["run_id"]
+            break
+    state = {
+        **base,
+        "state": "running" if code is None else ("finished" if code == 0 else "failed"),
+        "profile": job["profile"],
+        "seed": job["seed"],
+        "timesteps": job["timesteps"],
+        "elapsed_s": round((job.get("ended") or time.time()) - job["started"]),
+        "progress": progress,
+        "run_id": run_id,
+    }
+    if code not in (None, 0):
+        state["error"] = log_text[-1500:]
+    return state
+
+
 def _validate_model_compatibility(manifest: dict, environment_config: dict, normalization: dict) -> None:
     if manifest.get("environment_version") != ENVIRONMENT_VERSION:
         raise HTTPException(
@@ -153,7 +237,7 @@ def _validate_model_compatibility(manifest: dict, environment_config: dict, norm
 
 
 def _supported_mode(mode: str) -> None:
-    if mode in {"entrenamiento", "replay"}:
+    if mode == "replay":
         raise HTTPException(
             status_code=501,
             detail=f"El modo {mode!r} todavía no está implementado; no se devolverá una simulación sustituta",
@@ -177,6 +261,7 @@ def _episode_payload(active: ActiveRun) -> dict:
             "wind_mps2": environment.wind.astype(float).tolist(),
             "environment_version": environment.environment_version,
         },
+        "model_family": active.model_family,
         "reward": float(active.reward),
         "episode_return": float(active.episode_return),
         "cause": active.cause,
@@ -339,7 +424,54 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
 
     @application.get("/version")
     def version_info():
-        return {"api_version": API_VERSION, "environment_version": ENVIRONMENT_VERSION}
+        commit = os.getenv("DRONE_RESCUE_GIT_COMMIT")
+        if not commit:
+            try:
+                commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT, text=True).strip()
+            except (OSError, subprocess.CalledProcessError):
+                commit = None
+        with runtime.lock:
+            active = runtime.active
+            served = None if active is None else {
+                "run_id": active.run_id,
+                "model_sha256": active.manifest.get("model_sha256"),
+                "registry_uri": active.manifest.get("registry_uri"),
+                "model_family": active.model_family,
+                "level": active.manifest.get("level_id"),
+            }
+        return {"api_version": API_VERSION, "environment_version": ENVIRONMENT_VERSION,
+                "git_commit": commit, "served_model": served}
+
+    @application.get("/training")
+    def training_status():
+        with runtime.lock:
+            return _training_state()
+
+    @application.post("/training")
+    def start_training(request: TrainingRequest):
+        if production and os.getenv("DRONE_RESCUE_ALLOW_TRAINING") != "1":
+            raise HTTPException(status_code=403, detail="El entrenamiento está desactivado en este despliegue")
+        if request.timesteps > TRAINING_MAX_TIMESTEPS:
+            raise HTTPException(status_code=422, detail=f"El presupuesto máximo es {TRAINING_MAX_TIMESTEPS} pasos")
+        profile = TRAINING_PROFILE_DIR / f"{request.profile}.yaml"
+        if not profile.is_file():
+            raise HTTPException(status_code=404, detail=f"No existe el perfil {request.profile}")
+        with runtime.lock:
+            if runtime.training and runtime.training["process"].poll() is None:
+                raise HTTPException(status_code=409, detail="Ya hay un entrenamiento en curso")
+            directory = tempfile.mkdtemp(prefix="drone-rescue-training-")
+            log_path, status_path = Path(directory) / "train.log", Path(directory) / "status.json"
+            with log_path.open("w", encoding="utf-8") as log:
+                process = subprocess.Popen(
+                    [sys.executable, "-m", "pipelines.train_ppo", "--profile", str(profile), "--seed", str(request.seed),
+                     "--timesteps", str(request.timesteps), "--status-file", str(status_path),
+                     "--manifest-dir", str(MANIFEST_DIR)],
+                    cwd=PROJECT_ROOT, stdout=log, stderr=subprocess.STDOUT,
+                )
+            runtime.training = {"process": process, "log": str(log_path), "status": str(status_path),
+                                "profile": request.profile, "seed": request.seed,
+                                "timesteps": request.timesteps, "started": time.time()}
+            return _training_state()
 
     @application.get("/catalog")
     def catalog():
@@ -384,6 +516,9 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
                             "environment_version": tags.get("environment_version") or manifest.get("environment_version"),
                             "seed": manifest.get("seed", _optional_int(params.get("seed"))),
                             "training_episodes": _optional_int(params.get("episodes")),
+                            "training_timesteps": _optional_int(params.get("timesteps")),
+                            "algorithm": tags.get("algorithm") or manifest.get("algorithm") or "q_learning",
+                            "model_family": tags.get("model_family") or manifest.get("model_family") or "drone-rescue-v2",
                             "mean_steps": artifact_details["mean_steps"],
                             "duration_seconds": duration_seconds,
                             "model_version": manifest.get("registry_version"),
@@ -430,15 +565,22 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
             normalization = json.loads(normalization_path.read_text(encoding="utf-8"))
             if not isinstance(normalization, dict):
                 raise HTTPException(status_code=422, detail="normalization.json debe ser un objeto JSON")
-            _validate_model_compatibility(manifest, environment_config, normalization)
+            is_ppo = manifest.get("algorithm") == "ppo"
+            if is_ppo:
+                _validate_ppo_compatibility(manifest, normalization)
+            else:
+                _validate_model_compatibility(manifest, environment_config, normalization)
             environment_config_path = directory / "environment.yaml"
             environment_config_path.write_text(
                 yaml.safe_dump(environment_config, sort_keys=True),
                 encoding="utf-8",
             )
-            environment = DroneEnv(config_path=environment_config_path)
-            q_table = load_q_table(model_path)
-            if environment.action_space.n != int(normalization["action_dimensions"]):
+            family = str(manifest.get("model_family", "drone-rescue-v2"))
+            stabilized_env = make_env(environment_config_path, family) if is_ppo else None
+            environment = stabilized_env.unwrapped if is_ppo else DroneEnv(config_path=environment_config_path)
+            q_table = {} if is_ppo else load_q_table(model_path)
+            ppo_policy = PPOPolicy(model_path) if is_ppo else None
+            if not is_ppo and environment.action_space.n != int(normalization["action_dimensions"]):
                 raise HTTPException(status_code=409, detail="El espacio de acciones no coincide con la normalización")
             observation, _ = environment.reset(seed=request.seed)
             new_active = ActiveRun(
@@ -450,6 +592,9 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
                 q_table=q_table,
                 temporary_directory=temporary_directory,
                 observation=observation,
+                ppo_policy=ppo_policy,
+                stabilized_env=stabilized_env,
+                model_family=family,
             )
         except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
             temporary_directory.cleanup()
@@ -475,10 +620,11 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
                 "version": environment.environment_version,
                 "reward_version": environment.reward_version,
                 "level": manifest.get("level_id"),
-                "model_family": (
+                "model_family": new_active.model_family if new_active.ppo_policy else (
                     environment_config.get("experiment", {}).get("model_family")
                     or environment_config.get("level", {}).get("model_family")
                 ),
+                "algorithm": "ppo" if new_active.ppo_policy else "q_learning",
             },
             "config": environment_config,
             "config_sha256": manifest["config_sha256"],
@@ -494,21 +640,14 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
                 manifest = active.manifest.copy()
                 model_path = Path(evaluation_directory.name) / active.model_path.name
                 shutil.copyfile(active.model_path, model_path)
-            try:
-                suite, suite_path = load_suite(EVALUATION_SUITE_PATH)
-            except (OSError, ValueError) as error:
-                raise HTTPException(status_code=422, detail=f"No se pudo cargar la suite: {error}") from error
-            suite_sha256 = _sha256(suite_path)
-            if (
-                suite["evaluation_suite_id"] != manifest.get("evaluation_suite_id")
-                or suite["version"] != manifest.get("evaluation_suite_version")
-                or suite_sha256 != manifest.get("evaluation_suite_sha256")
-            ):
-                raise HTTPException(status_code=409, detail="La suite configurada no coincide con el manifiesto")
+            _, suite_path = _suite_for_manifest(manifest)
             evaluation_id = str(uuid.uuid4())
             output_path = PROJECT_ROOT / "artifacts" / "results" / f"api-evaluation-{evaluation_id}.json"
             try:
-                result = evaluate(suite_path, model_path, output_path)
+                if manifest.get("algorithm") == "ppo":
+                    result = evaluate_ppo(suite_path, model_path, manifest["model_family"], output_path)
+                else:
+                    result = evaluate(suite_path, model_path, output_path)
             except (ValueError, FileExistsError) as error:
                 raise HTTPException(status_code=422, detail=f"No se pudo ejecutar la evaluación: {error}") from error
             return {
@@ -526,7 +665,11 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
         with runtime.lock:
             active = runtime.require_active()
             active.mode = request.mode
-            active.observation, _ = active.environment.reset(seed=request.seed)
+            if active.stabilized_env is not None:
+                active.stabilized_env.reset(seed=request.seed)  # también reinicia el estabilizador
+                active.observation = active.environment._observation()
+            else:
+                active.observation, _ = active.environment.reset(seed=request.seed)
             active.reward = 0.0
             active.episode_return = 0.0
             active.cause = None
@@ -564,25 +707,41 @@ def _create_app(*, production: bool | None = None, cors_origins: list[str] | Non
             else:
                 if action is not None:
                     raise HTTPException(status_code=422, detail=f"El modo {active.mode!r} no acepta action")
-                selected_action = QLearningPolicy(active.q_table).act(observation, active.environment.config)
+                # evaluación: modelo congelado sin exploración; entrenamiento: misma política explorando
+                explore = active.mode == "entrenamiento"
+                if active.ppo_policy is not None:
+                    features = make_features(observation)
+                    model_action = int(active.ppo_policy.model.predict(features, deterministic=not explore)[0])
+                    _, reward, terminated, truncated, info = active.stabilized_env.step(model_action)
+                    return _apply_transition(active, active.environment._observation(), reward, terminated, truncated, info)
+                if explore and active.environment.np_random.random() < EXPLORATION_EPSILON:
+                    selected_action = int(active.environment.np_random.integers(active.environment.action_space.n))
+                else:
+                    selected_action = QLearningPolicy(active.q_table).act(observation, active.environment.config)
             if not active.environment.action_space.contains(selected_action):
                 raise HTTPException(status_code=422, detail=f"Acción fuera del espacio válido: {selected_action}")
             next_observation, reward, terminated, truncated, info = active.environment.step(selected_action)
-            active.observation = next_observation
-            active.reward = float(reward)
-            active.episode_return += float(reward)
-            active.cause = info["cause"]
-            active.terminated = bool(terminated)
-            active.truncated = bool(truncated)
-            return _episode_payload(active)
+            return _apply_transition(active, next_observation, reward, terminated, truncated, info)
 
     return application
+
+
+def _apply_transition(active: ActiveRun, observation, reward, terminated, truncated, info) -> dict:
+    active.observation = observation
+    active.reward = float(reward)
+    active.episode_return += float(reward)
+    active.cause = info["cause"]
+    active.terminated = bool(terminated)
+    active.truncated = bool(truncated)
+    return _episode_payload(active)
 
 
 app = _create_app()
 
 
 def main() -> None:
+    os.chdir(PROJECT_ROOT)
+    configure_tracking()
     production = os.getenv("DRONE_RESCUE_ENV", "development").lower() == "production"
     options = {
         "app": "api.main:app",

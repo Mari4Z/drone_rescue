@@ -132,3 +132,36 @@ def test_complete_run_produces_recoverable_package(tmp_path, monkeypatch):
     env = make_env(os.path.join(repo, LEVEL), "drone-rescue-v3")
     features, _ = env.reset(seed=0)
     assert 0 <= PPOPolicy(model).act(features) < N_ACTIONS
+
+
+def test_api_loads_and_evaluates_real_ppo_run(tmp_path, monkeypatch):
+    import mlflow
+    from fastapi.testclient import TestClient
+
+    from api import main as api
+
+    repo = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    monkeypatch.chdir(tmp_path)
+    mlflow.set_tracking_uri(f"sqlite:///{tmp_path}/mlflow.db")
+    result = train_ppo.train_run(
+        os.path.join(repo, "configs/training/ppo_v3_n1.yaml"), 3, manifest_dir=tmp_path / "manifests",
+        package_dir=tmp_path / "models", timesteps_override=200, allow_dirty=True,
+    )
+    monkeypatch.setattr(api, "runtime", api.ApiRuntime())
+    monkeypatch.setattr(api, "MANIFEST_DIR", tmp_path / "manifests")
+    monkeypatch.setattr(api, "PROJECT_ROOT", Path(repo))
+    client = TestClient(api._create_app(production=False, cors_origins=[]))
+    loaded = client.post("/load", json={"run_id": result["run_id"], "seed": 0})
+    assert loaded.status_code == 200, loaded.text
+    assert loaded.json()["environment"]["model_family"] == "drone-rescue-v3"
+    assert loaded.json()["environment"]["algorithm"] == "ppo"
+    assert client.post("/episode/reset", json={"mode": "evaluacion", "seed": 0}).status_code == 200
+    step = client.get("/episode/step").json()
+    assert step["telemetry"]["steps"] == 2 and step["model_family"] == "drone-rescue-v3"
+    assert client.post("/episode/reset", json={"mode": "entrenamiento", "seed": 0}).status_code == 200
+    assert client.get("/episode/step").status_code == 200
+    assert client.post("/episode/reset", json={"mode": "manual", "seed": 0}).status_code == 200
+    assert client.get("/episode/step", params={"action": 4}).json()["telemetry"]["steps"] == 1
+    catalog = {run["run_id"]: run for run in client.get("/catalog").json()["runs"]}
+    assert catalog[result["run_id"]]["algorithm"] == "ppo"
+    assert client.get("/version").json()["served_model"]["model_family"] == "drone-rescue-v3"

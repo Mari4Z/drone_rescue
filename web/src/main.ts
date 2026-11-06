@@ -2,6 +2,8 @@ import "./style.css";
 import {
   ApiError,
   evaluateModel,
+  getTraining,
+  startTraining,
   getCatalog,
   loadRun,
   resetEpisode,
@@ -12,6 +14,7 @@ import type {
   ConfigChange,
   EpisodeMode,
   EpisodeState,
+  TrainingStatus,
   EvaluationResponse,
   LoadResponse,
 } from "./types";
@@ -146,6 +149,19 @@ app.innerHTML = `
               </div>
             </div>
             <div class="training-notice" id="mode-notice">Elige un run compatible en el catálogo para comenzar.</div>
+          </section>
+
+          <section class="panel training-panel">
+            <div class="panel-heading"><div><p class="eyebrow">PIPELINE REAL · MLFLOW</p><h2>Entrenamiento</h2></div><span class="mode-badge" id="training-state">SIN ACTIVIDAD</span></div>
+            <p class="training-help">Lanza <code>pipelines/train_ppo.py</code> en un proceso aparte. Crea un run nuevo con su modelo y manifiesto. La escena no cambia los pesos.</p>
+            <div class="training-form">
+              <label>Perfil<select id="training-profile" aria-label="Perfil de entrenamiento"></select></label>
+              <label>Semilla<input id="training-seed" type="number" value="0" min="0"></label>
+              <label>Pasos<input id="training-timesteps" type="number" value="50000" min="1000" step="1000"></label>
+            </div>
+            <button class="button button-primary" id="start-training" type="button">▶ Iniciar entrenamiento</button>
+            <div class="meter" id="training-meter" role="meter" aria-label="Progreso del entrenamiento" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+            <small class="training-detail" id="training-detail">Sin entrenamiento en esta sesión.</small>
           </section>
 
           <section class="panel result-panel" id="evaluation-panel" hidden>
@@ -302,10 +318,10 @@ function renderCatalog(): void {
     return `<tr class="${activeRun?.run_id === run.run_id ? "row-active" : ""}">
       <td class="select-column"><input type="checkbox" class="run-select" data-run-id="${escapeHtml(run.run_id)}" ${selectedRuns.has(run.run_id) ? "checked" : ""} aria-label="Comparar run ${escapeHtml(run.run_id)}"></td>
       <td class="hypothesis-cell"><span class="experiment-name">${escapeHtml(run.experiment_id || run.experiment || run.level || "Experimento")}</span><strong>${escapeHtml(hypothesis)}</strong></td>
-      <td><span class="level-pill">${escapeHtml(run.level)}</span><small>env ${escapeHtml(run.environment_version)}</small></td>
+      <td><span class="level-pill">${escapeHtml(run.level)}</span><small>env ${escapeHtml(run.environment_version)}</small><small>${escapeHtml(run.algorithm)} · ${escapeHtml(run.model_family)}</small></td>
       <td class="changes-cell">${formatChanges(run.changes_vs_baseline)}${details}</td>
       <td><code class="run-id">${escapeHtml(run.run_id)}</code><small>semilla ${escapeHtml(run.seed)}</small></td>
-      <td><strong>${formatNumber(run.mean_steps, 1)} pasos</strong><small>${formatNumber(run.duration_seconds, 1)} s · ${escapeHtml(run.training_episodes ?? "—")} ep.</small></td>
+      <td><strong>${formatNumber(run.mean_steps, 1)} pasos</strong><small>${formatNumber(run.duration_seconds, 1)} s · ${escapeHtml(run.training_timesteps ? `${run.training_timesteps} pasos` : `${run.training_episodes ?? "—"} ep.`)}</small></td>
       <td><span class="metric-chip">${escapeHtml(metrics.primary)}</span><small>${escapeHtml(metrics.secondary)}</small><small>${escapeHtml(run.checkpoint_status || "sin estado de modelo")}</small></td>
       <td><span class="status ${statusClass}">${escapeHtml(run.status)}</span><small>${escapeHtml(run.model_version ? `v${run.model_version}` : "sin versión")}</small></td>
       <td><code class="commit">${escapeHtml(run.commit ? run.commit.slice(0, 8) : "—")}</code></td>
@@ -412,7 +428,7 @@ async function loadSelectedRun(run: CatalogRun, seed = run.seed ?? 0, link?: Epi
     scene.setEnvironment(loaded.config);
     element("#environment-version").textContent = `v${loaded.environment.version}`;
     element("#model-family").textContent = loaded.environment.model_family;
-    element("#active-model-name").textContent = run.experiment || run.level || "Modelo Q-table";
+    element("#active-model-name").textContent = `${loaded.environment.algorithm.toUpperCase()} · ${run.experiment_id || run.level || run.experiment || "modelo"}`;
     element("#active-model-run").textContent = `${run.run_id} · ${run.model_version ? `v${run.model_version}` : "sin versión"} · ${run.model_sha256?.slice(0, 12) ?? "SHA no disponible"}`;
     element("#active-environment").textContent = `${loaded.environment.level || "—"} · v${loaded.environment.version}`;
     element<HTMLButtonElement>("#reset-episode").disabled = false;
@@ -450,6 +466,67 @@ async function loadSelectedRun(run: CatalogRun, seed = run.seed ?? 0, link?: Epi
   }
 }
 
+function modeNotice(mode: EpisodeMode): string {
+  if (mode === "manual") return "Cada acción manual avanza exactamente un paso del ambiente.";
+  if (mode === "evaluacion") return "Modelo congelado, sin exploración.";
+  if (mode === "entrenamiento") return "Política cargada con exploración: así actúa al entrenar. No cambia sus pesos; para entrenar usa el panel Entrenamiento.";
+  return `La política ${modeLabels[mode]} selecciona acciones en Python.`;
+}
+
+let trainingTimer: number | undefined;
+
+function renderTraining(status: TrainingStatus): void {
+  const profile = element<HTMLSelectElement>("#training-profile");
+  if (!profile.options.length) {
+    profile.innerHTML = status.profiles.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("");
+  }
+  const labels = { idle: "SIN ACTIVIDAD", running: "ENTRENANDO", finished: "TERMINADO", failed: "FALLÓ" };
+  element("#training-state").textContent = labels[status.state];
+  const running = status.state === "running";
+  element<HTMLButtonElement>("#start-training").disabled = running;
+  const done = status.state === "finished" ? 1 : (status.progress?.timesteps ?? 0) / (status.timesteps || 1);
+  setMeter("#training-meter", status.state === "idle" ? 0 : done);
+  const success = status.progress?.["evaluation/success"];
+  const detail = element("#training-detail");
+  if (status.state === "idle") detail.textContent = "Sin entrenamiento en esta sesión.";
+  else if (status.state === "failed") detail.textContent = `Falló; queda como run con diagnóstico. ${status.error ?? ""}`;
+  else {
+    detail.textContent = `${status.profile} · semilla ${status.seed} · ${status.progress?.timesteps ?? 0}/${status.timesteps} pasos · ${status.elapsed_s} s`
+      + (typeof success === "number" ? ` · éxito en evaluación ${(success * 100).toFixed(0)}%` : "")
+      + (status.run_id ? ` · run ${status.run_id}` : "");
+  }
+}
+
+async function pollTraining(): Promise<void> {
+  try {
+    const status = await getTraining();
+    renderTraining(status);
+    window.clearTimeout(trainingTimer);
+    if (status.state === "running") {
+      trainingTimer = window.setTimeout(() => void pollTraining(), 3000);
+    } else if (status.state === "finished" && status.run_id && !catalogRuns.some((run) => run.run_id === status.run_id)) {
+      await refreshCatalog();
+    }
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function launchTraining(): Promise<void> {
+  clearError();
+  try {
+    const status = await startTraining(
+      element<HTMLSelectElement>("#training-profile").value,
+      Number(element<HTMLInputElement>("#training-seed").value),
+      Number(element<HTMLInputElement>("#training-timesteps").value),
+    );
+    renderTraining(status);
+    void pollTraining();
+  } catch (error) {
+    showError(error);
+  }
+}
+
 async function changeMode(mode: EpisodeMode): Promise<void> {
   if (!activeLoad) return;
   clearError();
@@ -461,9 +538,7 @@ async function changeMode(mode: EpisodeMode): Promise<void> {
     episodeSteps = 0;
     updateEpisodeView(state);
     updateDeepLink();
-    element("#mode-notice").textContent = mode === "manual"
-      ? "Cada acción manual avanza exactamente un paso del ambiente."
-      : `La política ${modeLabels[mode]} selecciona acciones en Python.`;
+    element("#mode-notice").textContent = modeNotice(mode);
   } catch (error) {
     modeSelect.value = currentMode;
     showError(error);
@@ -607,6 +682,7 @@ element<HTMLButtonElement>("#reset-episode").addEventListener("click", () => {
 element<HTMLButtonElement>("#evaluate-model").addEventListener("click", () => {
   void runEvaluation();
 });
+element<HTMLButtonElement>("#start-training").addEventListener("click", () => void launchTraining());
 element<HTMLButtonElement>("#compare-runs").addEventListener("click", renderComparison);
 element<HTMLButtonElement>("#refresh-catalog").addEventListener("click", () => void refreshCatalog());
 element<HTMLButtonElement>("#dismiss-error").addEventListener("click", clearError);
@@ -618,3 +694,4 @@ window.addEventListener("hashchange", () => {
 window.addEventListener("beforeunload", () => scene.dispose(), { once: true });
 
 void refreshCatalog();
+void pollTraining();

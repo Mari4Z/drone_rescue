@@ -94,10 +94,9 @@ def test_health_and_version(api_client):
     assert api_client.get("/health").json() == {"status": "ok", "model_loaded": False}
     version = api_client.get("/version")
     assert version.status_code == 200
-    assert version.json() == {
-        "api_version": api.API_VERSION,
-        "environment_version": api.ENVIRONMENT_VERSION,
-    }
+    assert version.json()["api_version"] == api.API_VERSION
+    assert version.json()["environment_version"] == api.ENVIRONMENT_VERSION
+    assert version.json()["served_model"] is None
 
 
 def test_catalog_joins_mlflow_runs_and_manifests(api_client, monkeypatch):
@@ -245,7 +244,7 @@ def test_episode_reset_random_and_reference_modes(api_client):
     assert api_client.get("/episode/step").status_code == 200
 
 
-@pytest.mark.parametrize("mode", ["entrenamiento", "replay"])
+@pytest.mark.parametrize("mode", ["replay"])
 def test_unimplemented_modes_return_real_http_errors(api_client, mode):
     _load(api_client)
     response = api_client.post("/episode/reset", json={"mode": mode})
@@ -283,3 +282,30 @@ def test_cors_uses_configured_origins():
     )
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "https://web.example"
+
+
+def test_training_mode_runs_the_loaded_policy_with_exploration(api_client):
+    _load(api_client)
+    response = api_client.post("/episode/reset", json={"mode": "entrenamiento", "seed": 7})
+    assert response.status_code == 200 and response.json()["mode"] == "entrenamiento"
+    assert api_client.get("/episode/step").json()["telemetry"]["steps"] == 1
+
+
+def test_training_rejects_unknown_profile_and_excess_budget(api_client):
+    assert api_client.post("/training", json={"profile": "ppo_no_existe"}).status_code == 404
+    assert api_client.post("/training", json={"profile": "../secreto"}).status_code == 422
+    assert api_client.post("/training", json={"profile": "ppo_v3_n1", "timesteps": 10**9}).status_code == 422
+    state = api_client.get("/training").json()
+    assert state["state"] == "idle" and "ppo_v3_n1" in state["profiles"]
+
+
+def test_training_is_disabled_in_production_by_default(monkeypatch):
+    monkeypatch.delenv("DRONE_RESCUE_ALLOW_TRAINING", raising=False)
+    client = TestClient(api._create_app(production=True, cors_origins=["https://ejemplo.test"]), base_url="https://testserver")
+    assert client.post("/training", json={"profile": "ppo_v3_n1"}).status_code == 403
+
+
+def test_version_reports_commit_and_served_model(api_client):
+    _load(api_client)
+    payload = api_client.get("/version").json()
+    assert payload["served_model"]["run_id"] == RUN_ID and "git_commit" in payload

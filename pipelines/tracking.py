@@ -1,7 +1,8 @@
 """Ubicación versionada del registro MLflow del proyecto.
 
-Base de datos y artefactos viven en artifacts/mlflow, seguidos por DVC. Los artefactos usan una ruta
-relativa para que el registro siga funcionando al recuperarlo en otro equipo, desde la raíz del repo.
+Base de datos y artefactos viven en artifacts/mlflow, seguidos por DVC. MLflow guarda rutas absolutas,
+así que este registro solo resuelve artefactos en el equipo donde se creó; en otro equipo el modelo se
+recupera con el paquete de artifacts/models y se verifica con los SHA-256 del manifiesto.
 """
 
 from __future__ import annotations

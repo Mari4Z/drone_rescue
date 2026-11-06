@@ -5,6 +5,7 @@ import type {
   EpisodeState,
   EvaluationResponse,
   LoadResponse,
+  TrainingStatus,
 } from "./types";
 
 const configuredApiUrl = import.meta.env.VITE_API_BASE_URL?.trim();
@@ -96,6 +97,17 @@ export function resetEpisode(mode: EpisodeMode, seed: number): Promise<EpisodeSt
 export function stepEpisode(action?: number): Promise<EpisodeState> {
   const query = action === undefined ? "" : `?action=${encodeURIComponent(action)}`;
   return request(`/episode/step${query}`);
+}
+
+export function getTraining(): Promise<TrainingStatus> {
+  return request("/training");
+}
+
+export function startTraining(profile: string, seed: number, timesteps: number): Promise<TrainingStatus> {
+  return request("/training", {
+    method: "POST",
+    body: JSON.stringify({ profile, seed, timesteps }),
+  });
 }
 
 export function evaluateModel(): Promise<EvaluationResponse> {

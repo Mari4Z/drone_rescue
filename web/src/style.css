@@ -82,6 +82,13 @@ h1 { margin-bottom: 7px; font-size: clamp(29px, 3vw, 39px); line-height: 1.12; l
 .meter[data-level="mid"] i { background: var(--amber); }
 .meter[data-level="low"] i { background: var(--red); }
 .control-column { display: grid; gap: 13px; }
+.training-help { margin: 12px 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.training-help code { font: 10px var(--mono); }
+.training-form { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.training-form label { display: grid; gap: 4px; color: var(--muted); font: 9px var(--mono); }
+.training-form select, .training-form input { width: 100%; min-width: 0; padding: 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--soft); font: 11px var(--mono); }
+.training-panel .button { width: 100%; justify-content: center; margin-bottom: 10px; }
+.training-detail { display: block; color: var(--muted); font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
 .panel { padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
 .mode-badge { padding: 5px 8px; border: 1px solid #47634f; border-radius: 4px; background: #22382b; color: var(--mint); font: 9px var(--mono); }
 .active-model { display: flex; align-items: center; gap: 11px; margin: 17px 0 14px; padding: 12px; border: 1px solid #314238; border-radius: 7px; background: #18251d; }

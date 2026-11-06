@@ -25,6 +25,9 @@ export interface CatalogRun {
   environment_version: string | null;
   seed: number | null;
   training_episodes: number | null;
+  training_timesteps: number | null;
+  algorithm: string;
+  model_family: string;
   mean_steps: number | null;
   duration_seconds: number | null;
   model_version: string | null;
@@ -58,6 +61,7 @@ export interface LoadResponse {
     reward_version: string;
     level: string | null;
     model_family: string;
+    algorithm: string;
   };
   config: DroneConfig;
   config_sha256: string;
@@ -110,6 +114,24 @@ export interface EvaluationResponse {
       case_id: string;
       metrics: Record<string, number | null>;
     }>;
+  };
+}
+
+export interface TrainingStatus {
+  state: "idle" | "running" | "finished" | "failed";
+  profiles: string[];
+  max_timesteps: number;
+  profile?: string;
+  seed?: number;
+  timesteps?: number;
+  elapsed_s?: number;
+  run_id?: string | null;
+  error?: string;
+  progress?: {
+    timesteps?: number;
+    "training/success"?: number;
+    "evaluation/success"?: number;
+    "evaluation/delivered"?: number;
   };
 }
 
