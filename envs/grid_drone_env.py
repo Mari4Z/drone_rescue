@@ -9,6 +9,10 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
+FAMILY = "grid-drone-v1"
+ENVIRONMENT_VERSION = "1.0.0"
+REWARD_VERSION = "1.0.0"
+
 CELL = 5  # metros por celda
 NX, NY, NZ = 20, 20, 12
 

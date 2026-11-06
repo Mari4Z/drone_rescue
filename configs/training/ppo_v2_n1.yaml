@@ -1,0 +1,21 @@
+model_family: drone-rescue-v2
+experiment:
+  id: ppo-v2-n1
+  hypothesis: "PPO con control directo de fuerzas completa la misión base sin cambiar el contrato de acciones; se espera que falle si penalizar soltar impide descubrir la entrega."
+level:
+  id: N1
+  config: configs/levels/n1_mision_base.yaml
+training:
+  timesteps: 3000000
+  n_envs: 4
+  evaluation_every: 250000
+  evaluation_seeds: [101, 211, 307, 401, 503]
+  agent:
+    n_steps: 1024
+    batch_size: 512
+    n_epochs: 5
+    gamma: 0.995
+    gae_lambda: 0.95
+    ent_coef: 0.01
+    learning_rate: 0.0003
+    net_arch: [128, 128]
