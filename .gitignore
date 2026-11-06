@@ -32,3 +32,8 @@ drone_route*.png
 # DVC local
 .dvc/cache/
 .dvc/tmp/
+
+# Salidas locales
+.DS_Store
+models/
+drone_view*.html
