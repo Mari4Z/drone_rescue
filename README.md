@@ -141,11 +141,25 @@ configurar un enlace navegable al UI; sin un UI HTTP(S), el catálogo devuelve
 La API solo puede cargar runs cuyos artefactos MLflow y manifiestos sean
 accesibles desde el servidor.
 
+## Familia de cuadrícula (grid-drone-v1)
+
+`cli.py` opera una familia aparte: cuadrícula discreta y misión de A a B, sin física ni
+batería. No es compatible con `drone-rescue-v2` y no resuelve la misión completa; el detalle
+y sus límites están en [`docs/familia_cuadricula.md`](docs/familia_cuadricula.md).
+
+```bash
+python cli.py envs
+python cli.py train --algo dqn --steps 1500000 --out models/grid_dqn.pt
+python cli.py eval --model models/grid_dqn.pt --episodes 100
+python cli.py run --model models/grid_dqn.pt --web
+```
+
 ## Arquitectura
 
 - `api/main.py`: API FastAPI/Uvicorn para catálogo, carga, evaluación y pasos.
 - `envs/`: entorno Gymnasium canónico y reglas físicas de la simulación.
-- `agents/`: agente Q-learning tabular.
+- `agents/`: agente Q-learning tabular y DQN exploratorio de `drone-rescue-v2`.
+- `envs/grid_drone_env.py`, `agents/grid/`, `viewer/`, `cli.py`: familia `grid-drone-v1`.
 - `env/` y `agent/`: adaptadores para preservar imports históricos.
 - `pipelines/train.py`: entrenamiento MLflow, evaluación greedy, checkpoint,
   Model Registry y manifiesto; `train.py` conserva la ruta CLI anterior.
