@@ -1,23 +1,20 @@
 {
-  "model_name": "",
-  "model_version": "",
-  "created_at_utc": "",
-  "artifact_path": "",
-  "sha256": "",
-  "format": "q-table-numpy",
-  "normalization": {
-    "method": "none",
-    "parameters": {}
-  },
-  "environment": {
-    "id": "DroneRescue-v0",
-    "version": ""
-  },
-  "resolved_config": {},
-  "seeds": [],
-  "metrics": {},
-  "source": {
-    "git_commit": "",
-    "run_id": ""
-  }
+  "run_id": null,
+  "level_id": null,
+  "environment_version": null,
+  "git_commit": null,
+  "config_sha256": null,
+  "config_uri": null,
+  "model_uri": null,
+  "model_sha256": null,
+  "normalization_uri": null,
+  "normalization_sha256": null,
+  "runtime_ref": null,
+  "evaluation_suite_id": null,
+  "evaluation_suite_version": null,
+  "evaluation_suite_sha256": null,
+  "seed": null,
+  "parent_run_id": null,
+  "registry_uri": null,
+  "diagnostic": null
 }

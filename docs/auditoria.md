@@ -26,6 +26,11 @@ final descrito en la solicitud; no puede afirmar cumplimiento literal del PDF.
   simulación y recompensa en YAML.
 - DVC inicializado con ubicaciones versionadas para Q-tables, suites y
   resultados. Aún no hay artefactos grandes ni remoto DVC configurado.
+- Entrenamiento `pipelines/train.py` con perfiles N1–N3, runs MLflow, curvas de
+  entrenamiento y evaluación separadas, checkpoints `.npy`, snapshots, manifiestos,
+  reanudación por run padre y registro de Q-tables en Model Registry.
+- Evaluación reproducible desde manifiesto con verificación SHA-256 de checkpoint
+  y snapshot; una prueba repite los resultados deterministas por semilla.
 - Variables locales de ejemplo sin secretos y reglas de exclusión de archivos
   temporales, entornos virtuales, frontend y salidas de entrenamiento.
 
@@ -42,12 +47,12 @@ final descrito en la solicitud; no puede afirmar cumplimiento literal del PDF.
 - API FastAPI y contrato entre la API y la interfaz.
 - Web Vite/TypeScript/Three.js y despliegue Vercel; la animación todavía no
   consume estado real del entorno.
-- Instrumentar `train.py` para registrar runs, métricas y modelos en MLflow;
-  el run actual solo registra la validación estructural, no un entrenamiento.
-- Registro/alias/versionado y recuperación de modelos desde MLflow.
+- Probar entrenamiento prolongado para medir convergencia y ajustar presupuestos
+  por nivel; las pruebas de esta adecuación usan pocos episodios y no demuestran
+  aprendizaje exitoso.
+- Configurar servidor/registry remoto y alias de producción; el backend actual es
+  MLflow local con SQLite.
 - Prefect para orquestar el pipeline.
-- Flujo de guardado/recuperación de modelos con manifiesto validado y
-  verificación SHA-256.
 - Prueba automatizada de rollback de modelo.
 - Remoto DVC compartido y reglas para suites/resultados concretos.
 - Comparación requisito por requisito con el PDF oficial, cuando se incorpore
