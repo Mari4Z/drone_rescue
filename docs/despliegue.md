@@ -42,7 +42,10 @@
    cada manifiesto y crea runs remotos nuevos; no modifica ni borra el tracking
    local. Revisa los logs y verifica la carga de un modelo antiguo antes de
    desplegar la API. Una migración parcial se marca como fallida y no se
-   sobrescribe automáticamente. Al terminar, ejecuta
+   sobrescribe automáticamente. Si un proceso se interrumpió y dejó un run con
+   estado `RUNNING`, verifica primero que no haya otra migración activa y repite
+   con `--retry-incomplete`; el intento previo se conserva y marca como fallido.
+   Al terminar, ejecuta
    `unset MLFLOW_TRACKING_USERNAME MLFLOW_TRACKING_PASSWORD`.
 3. Configura el remoto DVC de DagsHub usando los comandos que muestra el panel
    de ese repositorio. El patrón habitual es:

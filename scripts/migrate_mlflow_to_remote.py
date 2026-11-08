@@ -95,7 +95,49 @@ def _copy_params(source_run, destination: MlflowClient, remote_run_id: str) -> N
         destination.log_batch(remote_run_id, params=pending)
 
 
-def migrate(source_uri: str, destination_uri: str, *, dry_run: bool = False) -> dict[str, str]:
+def _resolve_existing_attempts(
+    destination: MlflowClient,
+    existing: list,
+    source_run_id: str,
+    *,
+    retry_incomplete: bool,
+) -> str | None:
+    completed = next(
+        (item for item in existing if item.data.tags.get("migration_status") == "COMPLETED"),
+        None,
+    )
+    if completed:
+        return completed.info.run_id
+
+    incomplete = [
+        item for item in existing
+        if item.data.tags.get("migration_status") != "FAILED"
+    ]
+    if incomplete and not retry_incomplete:
+        states = ", ".join(
+            f"{item.info.run_id}: {item.data.tags.get('migration_status', 'sin estado')}"
+            for item in incomplete
+        )
+        raise RuntimeError(
+            f"El run {source_run_id} tiene intentos incompletos ({states}). "
+            "Verifica que no haya otra migración en curso y repite con --retry-incomplete "
+            "para conservarlos como FAILED e iniciar un intento nuevo."
+        )
+
+    for item in incomplete:
+        destination.set_tag(item.info.run_id, "migration_status", "FAILED")
+        destination.set_tag(item.info.run_id, "migration_recovered", "true")
+        destination.set_terminated(item.info.run_id, status="FAILED")
+    return None
+
+
+def migrate(
+    source_uri: str,
+    destination_uri: str,
+    *,
+    dry_run: bool = False,
+    retry_incomplete: bool = False,
+) -> dict[str, str]:
     source = MlflowClient(tracking_uri=source_uri)
     source_runs = []
     source_experiments = source.search_experiments()
@@ -124,16 +166,18 @@ def migrate(source_uri: str, destination_uri: str, *, dry_run: bool = False) -> 
         existing = destination.search_runs(
             experiment_ids=list(destination_experiments.values()),
             filter_string=f"tags.source_run_id = '{run.info.run_id}'",
-            max_results=1,
+            max_results=1000,
         ) if destination_experiments else []
         if existing:
-            if existing[0].data.tags.get("migration_status") != "COMPLETED":
-                raise RuntimeError(
-                    f"El run {run.info.run_id} ya existe en destino con migración incompleta "
-                    f"({existing[0].data.tags.get('migration_status', 'sin estado')}); no se sobrescribirá."
-                )
-            mappings[run.info.run_id] = existing[0].info.run_id
-            continue
+            completed_id = _resolve_existing_attempts(
+                destination,
+                existing,
+                run.info.run_id,
+                retry_incomplete=retry_incomplete,
+            )
+            if completed_id:
+                mappings[run.info.run_id] = completed_id
+                continue
         destination_experiment_id = destination_experiments.get(experiment.name)
         if destination_experiment_id is None:
             destination_experiment_id = destination.create_experiment(experiment.name)
@@ -146,6 +190,7 @@ def migrate(source_uri: str, destination_uri: str, *, dry_run: bool = False) -> 
         }
         tags["source_run_id"] = run.info.run_id
         tags["migration_status"] = "RUNNING"
+        tags["migration_attempt"] = str(len(existing) + 1 if existing else 1)
         remote_run = destination.create_run(
             destination_experiment_id,
             start_time=run.info.start_time,
@@ -175,9 +220,19 @@ def main() -> None:
     parser.add_argument("--source-uri", default="sqlite:///mlflow.db")
     parser.add_argument("--destination-uri", required=True)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--retry-incomplete",
+        action="store_true",
+        help="Conserva intentos incompletos como FAILED y crea un intento nuevo; usar solo sin otra migración activa.",
+    )
     args = parser.parse_args()
     mlflow.set_tracking_uri(args.destination_uri)
-    migrate(args.source_uri, args.destination_uri, dry_run=args.dry_run)
+    migrate(
+        args.source_uri,
+        args.destination_uri,
+        dry_run=args.dry_run,
+        retry_incomplete=args.retry_incomplete,
+    )
 
 
 if __name__ == "__main__":
