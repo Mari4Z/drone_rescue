@@ -122,6 +122,14 @@ def test_catalog_joins_mlflow_runs_and_manifests(api_client, monkeypatch):
         info = RunInfo()
         data = RunData()
 
+    class IncompleteRun:
+        info = SimpleNamespace(run_id="partial-import", experiment_id="1")
+        data = SimpleNamespace(
+            tags={"source_run_id": RUN_ID, "migration_status": "RUNNING"},
+            params={},
+            metrics={},
+        )
+
     class Page(list):
         token = None
 
@@ -134,7 +142,7 @@ def test_catalog_joins_mlflow_runs_and_manifests(api_client, monkeypatch):
             return [Experiment()]
 
         def search_runs(self, **kwargs):
-            return Page([Run()])
+            return Page([IncompleteRun(), Run()])
 
     monkeypatch.setattr(api, "MlflowClient", Client)
     response = api_client.get("/catalog")
@@ -158,6 +166,7 @@ def test_catalog_joins_mlflow_runs_and_manifests(api_client, monkeypatch):
     assert run["environment_version"] == api.ENVIRONMENT_VERSION
     assert run["model_version"] == "3"
     assert run["model_available"] is True
+    assert len(response.json()["runs"]) == 1
     assert run["changed_dimension"] == "world.obstacles"
     assert {change["path"] for change in run["changes_vs_baseline"]} == {"world.obstacles"}
     assert run["config_error"] is None

@@ -185,7 +185,10 @@ def _find_imported_run(source_run_id: str):
     for experiment in client.search_experiments():
         page = client.search_runs(
             experiment_ids=[experiment.experiment_id],
-            filter_string=f"tags.source_run_id = '{source_run_id}'",
+            filter_string=(
+                f"tags.source_run_id = '{source_run_id}' "
+                "AND tags.migration_status = 'COMPLETED'"
+            ),
             max_results=1,
         )
         if page:
@@ -506,6 +509,11 @@ def _create_app(
                     for run in page:
                         remote_run_id = run.info.run_id
                         tags = run.data.tags
+                        if (
+                            tags.get("source_run_id")
+                            and tags.get("migration_status") != "COMPLETED"
+                        ):
+                            continue
                         run_id = tags.get("source_run_id", remote_run_id)
                         manifest = (
                             _read_manifest(run_id)
