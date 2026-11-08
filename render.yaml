@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: drone-rescue-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-api.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: DRONE_RESCUE_ENV
+        value: production
+      - key: DRONE_RESCUE_TRUST_PROXY_HTTPS
+        value: "true"
+      - key: DRONE_RESCUE_API_TOKEN
+        sync: false
+      - key: DRONE_RESCUE_CORS_ORIGINS
+        sync: false
+      - key: MLFLOW_TRACKING_URI
+        sync: false
+      - key: MLFLOW_TRACKING_USERNAME
+        sync: false
+      - key: MLFLOW_TRACKING_PASSWORD
+        sync: false
+      - key: MLFLOW_UI_URL
+        sync: false
