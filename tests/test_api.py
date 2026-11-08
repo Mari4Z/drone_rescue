@@ -1,5 +1,8 @@
 import hashlib
 import json
+import time
+from contextlib import contextmanager
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -85,8 +88,10 @@ def api_client(tmp_path, monkeypatch):
 
 
 def _load(client):
-    response = client.post("/load", json={"run_id": RUN_ID, "seed": 17})
+    session_id = "00000000-0000-0000-0000-000000000001"
+    response = client.post("/load", json={"run_id": RUN_ID, "seed": 17, "session_id": session_id})
     assert response.status_code == 200
+    client.headers.update({"X-Drone-Session": response.json()["session_id"]})
     return response
 
 
@@ -194,14 +199,27 @@ def test_load_rejects_unsupported_environment_version(api_client):
 
 
 def test_evaluate_requires_loaded_model_and_executes_suite(api_client, monkeypatch):
+    api_client.headers.update({"X-Drone-Session": "00000000-0000-0000-0000-000000000002"})
     assert api_client.post("/evaluate").status_code == 409
     _load(api_client)
     result = {"cases": [{"case_id": "N1-q_learning_greedy"}]}
     monkeypatch.setattr(api, "evaluate", lambda suite, model, output: result)
+    monkeypatch.setattr(api, "MlflowClient", lambda: SimpleNamespace(
+        get_run=lambda run_id: SimpleNamespace(info=SimpleNamespace(experiment_id="1"))
+    ))
+
+    @contextmanager
+    def fake_start_run(**kwargs):
+        yield SimpleNamespace(info=SimpleNamespace(run_id="evaluation-run-001"))
+
+    monkeypatch.setattr(api.mlflow, "start_run", fake_start_run)
+    monkeypatch.setattr(api.mlflow, "log_param", lambda *args, **kwargs: None)
+    monkeypatch.setattr(api.mlflow, "log_artifact", lambda *args, **kwargs: None)
+    monkeypatch.setattr(api.mlflow, "log_metric", lambda *args, **kwargs: None)
     response = api_client.post("/evaluate")
     assert response.status_code == 200
     assert response.json()["result"] == result
-    assert response.json()["result_path"].startswith("artifacts/results/api-evaluation-")
+    assert response.json()["result_path"] == "runs:/evaluation-run-001/evaluation/evaluacion.json"
 
 
 def test_episode_manual_step_reports_state_telemetry_reward_cause_and_mode(api_client):
@@ -233,12 +251,93 @@ def test_episode_reset_random_and_reference_modes(api_client):
     assert api_client.get("/episode/step").status_code == 200
 
 
-@pytest.mark.parametrize("mode", ["entrenamiento", "replay"])
-def test_unimplemented_modes_return_real_http_errors(api_client, mode):
+def test_training_mode_requires_training_endpoint(api_client):
+    response = api_client.post("/episode/reset", json={"mode": "entrenamiento"})
+    assert response.status_code == 409
+    assert "POST /training" in response.json()["detail"]
+
+
+def test_manual_session_works_without_loading_model(api_client):
+    response = api_client.post("/session", json={"config_id": "baseline", "seed": 11})
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["session_id"]) == 36
+    assert payload["state"]["mode"] == "manual"
+    assert payload["environment"]["version"] == api.ENVIRONMENT_VERSION
+    api_client.headers.update({"X-Drone-Session": payload["session_id"]})
+
+    step = api_client.get("/episode/step", params={"action": 4})
+    assert step.status_code == 200
+    assert step.json()["run_id"] == "manual-baseline"
+
+
+def test_multiple_clients_keep_independent_simulation_sessions(api_client):
+    first = api_client.post("/session", json={"config_id": "baseline", "seed": 1}).json()
+    api_client.headers.update({"X-Drone-Session": first["session_id"]})
+    assert api_client.get("/episode/step", params={"action": 4}).json()["telemetry"]["steps"] == 1
+
+    second = api_client.post("/session", json={"config_id": "n1", "seed": 2}).json()
+    api_client.headers.update({"X-Drone-Session": second["session_id"]})
+    assert api_client.get("/episode/step", params={"action": 4}).json()["telemetry"]["steps"] == 1
+
+    api_client.headers.update({"X-Drone-Session": first["session_id"]})
+    assert api_client.post("/episode/reset", json={"mode": "manual", "seed": 3}).json()["telemetry"]["steps"] == 0
+    api_client.headers.update({"X-Drone-Session": second["session_id"]})
+    assert api_client.get("/episode/step", params={"action": 4}).json()["telemetry"]["steps"] == 2
+
+
+def test_replay_requires_model_in_manual_session(api_client):
+    response = api_client.post("/session", json={"config_id": "baseline"})
+    assert response.status_code == 200
+    api_client.headers.update({"X-Drone-Session": response.json()["session_id"]})
+    response = api_client.post("/episode/reset", json={"mode": "replay", "seed": 1})
+    assert response.status_code == 409
+    assert "modelo" in response.json()["detail"]
+
+
+def test_replay_repeats_same_policy_trajectory_for_seed(api_client):
     _load(api_client)
-    response = api_client.post("/episode/reset", json={"mode": mode})
-    assert response.status_code == 501
-    assert mode in response.json()["detail"]
+    first_reset = api_client.post("/episode/reset", json={"mode": "replay", "seed": 23})
+    assert first_reset.status_code == 200
+    first_steps = [api_client.get("/episode/step").json() for _ in range(3)]
+
+    second_reset = api_client.post("/episode/reset", json={"mode": "replay", "seed": 23})
+    assert second_reset.status_code == 200
+    second_steps = [api_client.get("/episode/step").json() for _ in range(3)]
+    assert first_steps == second_steps
+
+
+def test_training_job_reports_progress_and_run_id(api_client, monkeypatch):
+    def fake_train_run(profile_path, seed, *, episodes_override, progress_callback):
+        progress_callback({
+            "episode": 1,
+            "total_episodes": episodes_override or 2,
+            "return": -1.0,
+            "success": False,
+            "epsilon": 0.9,
+            "cause": "collision",
+            "steps": 3,
+        })
+        return {
+            "run_id": "trained-run-1",
+            "manifest_path": "manifests/trained-run-1.json",
+            "checkpoint_path": "artifacts/q_tables/trained-run-1.npy",
+        }
+
+    monkeypatch.setattr(api, "train_run", fake_train_run)
+    response = api_client.post("/training", json={"profile_id": "n1", "seed": 7, "episodes": 2})
+    assert response.status_code == 202
+    job_id = response.json()["job_id"]
+
+    for _ in range(50):
+        status = api_client.get(f"/training/{job_id}")
+        if status.json()["status"] != "RUNNING":
+            break
+        time.sleep(0.01)
+    payload = status.json()
+    assert payload["status"] == "FINISHED"
+    assert payload["run_id"] == "trained-run-1"
+    assert payload["episode"] == 1
 
 
 def test_episode_requires_manual_action_and_rejects_mode_switch(api_client):
@@ -251,17 +350,33 @@ def test_episode_requires_manual_action_and_rejects_mode_switch(api_client):
 def test_production_requires_https_and_https_cors_origins():
     with pytest.raises(RuntimeError, match="CORS"):
         api._create_app(production=True, cors_origins=["http://localhost:5173"])
-    secure_client = TestClient(api._create_app(production=True, cors_origins=[]))
+    secure_client = TestClient(api._create_app(production=True, cors_origins=[], api_token="test-token"))
     assert secure_client.get("/health").status_code == 426
     https_client = TestClient(
-        api._create_app(production=True, cors_origins=[]),
+        api._create_app(production=True, cors_origins=[], api_token="test-token"),
         base_url="https://testserver",
     )
     assert https_client.get("/health").status_code == 200
 
 
+def test_production_api_requires_shared_token(api_client):
+    secured = TestClient(
+        api._create_app(production=True, cors_origins=[], api_token="secret"),
+        base_url="https://testserver",
+    )
+    assert secured.get("/catalog").status_code == 401
+    response = secured.post(
+        "/session",
+        headers={"X-API-Key": "secret"},
+        json={"config_id": "baseline", "seed": 2},
+    )
+    assert response.status_code == 200
+
+
 def test_cors_uses_configured_origins():
-    client = TestClient(api._create_app(production=False, cors_origins=["https://web.example"]))
+    client = TestClient(
+        api._create_app(production=False, cors_origins=["https://web.example"], api_token="secret")
+    )
     response = client.options(
         "/health",
         headers={
@@ -271,3 +386,6 @@ def test_cors_uses_configured_origins():
     )
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "https://web.example"
+    unauthorized = client.get("/catalog", headers={"Origin": "https://web.example"})
+    assert unauthorized.status_code == 401
+    assert unauthorized.headers["access-control-allow-origin"] == "https://web.example"

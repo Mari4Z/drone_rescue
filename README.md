@@ -97,16 +97,14 @@ python plot3d.py --show
 El evaluador usa la suite pública fija `drone-rescue-public-validation`; el set
 final reservado debe mantenerse fuera del repositorio.
 
-Para iniciar el seguimiento de datos grandes con DVC, agrega las salidas reales
-cuando existan:
+Los pesos y resultados actuales tienen punteros DVC en Git. Para conectarlos a
+un almacenamiento de equipo sin administrar un bucket S3, sigue
+[`docs/despliegue.md`](docs/despliegue.md) para crear el remoto de DagsHub y
+ejecutar `dvc push`. Los datos binarios no se suben con `git push`.
 
-```bash
-dvc add artifacts/q_tables artifacts/suites artifacts/results
-git add artifacts/*.dvc artifacts/.gitignore
-```
-
-Luego configura un remoto DVC compartido antes de usar `dvc push` o `dvc pull`.
-No se ha configurado un remoto en esta rama.
+La base MLflow local y `mlruns/` tampoco se versionan con Git. Antes de
+desplegar, migra sus runs y artefactos con
+`scripts/migrate_mlflow_to_remote.py`, siguiendo la misma guía.
 
 ## API de simulación
 
@@ -117,29 +115,42 @@ física al cliente. Con las dependencias instaladas, inicia Uvicorn localmente:
 python -m api.main
 ```
 
-`GET /catalog` combina runs de MLflow con manifiestos locales, métricas,
+`GET /catalog` combina runs de MLflow con manifiestos, métricas,
 semillas, duración, pasos, versiones de modelo y diferencias de configuración
 contra `configs/drone_rescue.yaml`. `POST /load`
 acepta `{"run_id": "<run_id>"}` y verifica los SHA-256 del modelo, la
 configuración y la normalización antes de activar la Q-table junto con el
 ambiente resuelto original. `POST /evaluate` ejecuta la suite pública fijada
-por `DRONE_RESCUE_EVALUATION_SUITE` y guarda un resultado con nombre único en
-`artifacts/results/`. `POST /episode/reset` inicia un episodio; `GET
+por `DRONE_RESCUE_EVALUATION_SUITE` y guarda el resultado como artefacto de un
+nuevo run de evaluación en MLflow. `POST /episode/reset` inicia un episodio; `GET
 /episode/step?action=4` avanza un paso manual y devuelve posición, telemetría,
 recompensa, causa y modo. Los modos `aleatorio`, `referencia` y `evaluacion`
-también están disponibles; `entrenamiento` y `replay` responden HTTP 501 hasta
-que exista una implementación real. `GET /health` y `GET /version` reportan
-estado y versiones servidas.
+también están disponibles. `POST /session` inicia control manual sin modelo;
+`POST /training` inicia un run asíncrono y `GET /training/{job_id}` informa
+progreso; `replay` vuelve a ejecutar de forma determinista el modelo cargado
+con la semilla elegida. Cada navegador recibe una sesión aislada mediante
+`X-Drone-Session`. `GET /health` y `/version` reportan estado y versiones.
 
-Configura `DRONE_RESCUE_CORS_ORIGINS` como lista separada por comas. En
-producción define `DRONE_RESCUE_ENV=production`,
-`DRONE_RESCUE_SSL_CERTFILE` y `DRONE_RESCUE_SSL_KEYFILE`; Uvicorn termina TLS
-directamente y la aplicación rechaza solicitudes que no usen HTTPS. Los
-orígenes CORS de producción también deben usar HTTPS. `MLFLOW_UI_URL` permite
-configurar un enlace navegable al UI; sin un UI HTTP(S), el catálogo devuelve
-`mlflow_link: null` y reporta por separado el URI de tracking y el URI del run.
-La API solo puede cargar runs cuyos artefactos MLflow y manifiestos sean
-accesibles desde el servidor.
+En producción `DRONE_RESCUE_API_TOKEN` es obligatorio; se envía en el
+encabezado `X-API-Key`, no en `VITE_*`. Configura
+`DRONE_RESCUE_CORS_ORIGINS` como lista separada por comas y exige orígenes
+HTTPS. Tras un proxy HTTPS confiable, define
+`DRONE_RESCUE_TRUST_PROXY_HTTPS=true`; si no, configura certificado y clave TLS
+directamente en Uvicorn. Define `MLFLOW_TRACKING_URI` y credenciales del
+servidor MLflow compartido para que catálogo, entrenamiento y carga de modelos
+usen el mismo tracking remoto.
+
+La API implementa hasta 32 sesiones de simulación concurrentes por proceso,
+con expiración por inactividad. Los trabajos de entrenamiento no sobreviven a
+un reinicio de la API.
+
+## Despliegue compartido
+
+La guía [`docs/despliegue.md`](docs/despliegue.md) describe Vercel, Render,
+autenticación compartida, migración de MLflow local y remoto DVC. El Blueprint
+de Render incluido usa el plan gratuito; por sus límites de suspensión y disco
+efímero no garantiza disponibilidad continua. Para uptime permanente se
+requiere un servicio activo de pago.
 
 ## Arquitectura
 

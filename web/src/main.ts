@@ -1,10 +1,15 @@
 import "./style.css";
 import {
   ApiError,
+  createManualSession,
   evaluateModel,
+  getTrainingStatus,
   getCatalog,
   loadRun,
   resetEpisode,
+  setApiSessionId,
+  setApiToken,
+  startTraining,
   stepEpisode,
 } from "./api";
 import type {
@@ -14,6 +19,8 @@ import type {
   EpisodeState,
   EvaluationResponse,
   LoadResponse,
+  ManualSessionResponse,
+  TrainingJob,
 } from "./types";
 
 const modes: EpisodeMode[] = [
@@ -62,6 +69,11 @@ app.innerHTML = `
       </a>
       <div class="topbar-right">
         <span class="authority"><i></i> SIMULACIÓN PYTHON · AUTORIDAD</span>
+        <form class="api-auth" id="api-auth-form">
+          <label class="sr-only" for="api-token">Clave compartida de la API</label>
+          <input id="api-token" type="password" autocomplete="current-password" placeholder="Clave de API (si aplica)">
+          <button class="button button-secondary" type="submit">Conectar</button>
+        </form>
         <span class="service-indicator" id="service-status">Conectando API…</span>
       </div>
     </header>
@@ -127,6 +139,19 @@ app.innerHTML = `
             <select id="mode-select" aria-label="Modo de operación">
               ${modes.map((mode) => `<option value="${mode}">${modeLabels[mode]}</option>`).join("")}
             </select>
+            <button class="button button-secondary manual-start" id="start-manual" type="button">Iniciar sesión manual sin modelo</button>
+            <div class="training-controls" id="training-controls" hidden>
+              <label for="training-profile">Perfil de entrenamiento</label>
+              <select id="training-profile">
+                <option value="n1" data-episodes="5000">N1 · misión base</option>
+                <option value="n2" data-episodes="10000">N2 · más decisiones</option>
+                <option value="n3" data-episodes="15000">N3 · operación exigente</option>
+              </select>
+              <label for="training-episodes">Episodios</label>
+              <input id="training-episodes" type="number" min="1" max="15000" step="500" value="5000">
+              <button class="button button-primary" id="start-training" type="button">Iniciar entrenamiento</button>
+              <small id="training-status">El entrenamiento se registra como un nuevo run MLflow.</small>
+            </div>
             <div class="control-actions">
               <button class="button button-secondary" id="reset-episode" type="button" disabled><span>↻</span> Reiniciar episodio</button>
               <button class="button button-primary" id="evaluate-model" type="button" disabled><span>◉</span> Ejecutar evaluación</button>
@@ -192,7 +217,7 @@ const modeSelect = element<HTMLSelectElement>("#mode-select");
 const selectedRuns = new Set<string>();
 let catalogRuns: CatalogRun[] = [];
 let activeRun: CatalogRun | null = null;
-let activeLoad: LoadResponse | null = null;
+let activeLoad: LoadResponse | ManualSessionResponse | null = null;
 let episode: EpisodeState | null = null;
 let episodeSeed = 0;
 let episodeActions: number[] = [];
@@ -200,6 +225,7 @@ let episodeSteps = 0;
 let currentMode: EpisodeMode = "manual";
 let operationBusy = false;
 let restoringLink = false;
+let trainingPollTimer: number | null = null;
 
 function showError(error: unknown): void {
   const status = error instanceof ApiError && error.status ? `HTTP ${error.status} · ` : "";
@@ -221,8 +247,10 @@ function setBusy(busy: boolean): void {
     button.disabled = busy || !activeLoad || currentMode !== "manual" || Boolean(episode?.terminated || episode?.truncated);
   });
   element<HTMLButtonElement>("#reset-episode").disabled = busy || !activeLoad;
-  element<HTMLButtonElement>("#evaluate-model").disabled = busy || !activeLoad;
+  element<HTMLButtonElement>("#evaluate-model").disabled = busy || !activeRun;
   modeSelect.disabled = busy || !activeLoad;
+  element<HTMLButtonElement>("#start-manual").disabled = busy;
+  element<HTMLButtonElement>("#start-training").disabled = busy;
 }
 
 function formatNumber(value: number | null | undefined, digits = 2): string {
@@ -344,9 +372,11 @@ function updateEpisodeView(state: EpisodeState): void {
 }
 
 function updateDeepLink(): void {
-  if (!activeRun || restoringLink) return;
+  if (currentMode === "entrenamiento" || restoringLink) return;
+  const runId = activeRun?.run_id ?? episode?.run_id;
+  if (!runId) return;
   const params = new URLSearchParams({
-    run: activeRun.run_id,
+    run: runId,
     seed: String(episodeSeed),
     mode: currentMode,
     steps: String(episodeSteps),
@@ -354,7 +384,7 @@ function updateDeepLink(): void {
   if (currentMode === "manual" && episodeActions.length) {
     params.set("actions", episodeActions.join(","));
   }
-  history.replaceState(null, "", `#/run/${encodeURIComponent(activeRun.run_id)}?${params}`);
+  history.replaceState(null, "", `#/run/${encodeURIComponent(runId)}?${params}`);
 }
 
 function readDeepLink(): EpisodeLink | null {
@@ -376,6 +406,7 @@ function readDeepLink(): EpisodeLink | null {
     || steps < 0
     || !mode
     || !modes.includes(mode)
+    || mode === "entrenamiento"
     || actions.some((action) => !Number.isInteger(action) || action < 0 || action > 6)
   ) return null;
   return { runId, seed, mode, steps, actions };
@@ -386,6 +417,7 @@ async function loadSelectedRun(run: CatalogRun, seed = run.seed ?? 0, link?: Epi
   setBusy(true);
   try {
     const loaded = await loadRun(run.run_id, seed);
+    setApiSessionId(loaded.session_id);
     activeRun = run;
     activeLoad = loaded;
     episodeSeed = seed;
@@ -432,9 +464,53 @@ async function loadSelectedRun(run: CatalogRun, seed = run.seed ?? 0, link?: Epi
   }
 }
 
-async function changeMode(mode: EpisodeMode): Promise<void> {
-  if (!activeLoad) return;
+async function startManualSession(configId: "baseline" | "n1" | "n2" | "n3" = "baseline", seed = 0): Promise<void> {
   clearError();
+  setBusy(true);
+  try {
+    const session = await createManualSession(configId, seed);
+    setApiSessionId(session.session_id);
+    activeRun = null;
+    activeLoad = session;
+    episodeSeed = seed;
+    episodeActions = [];
+    episodeSteps = 0;
+    currentMode = "manual";
+    scene.setEnvironment(session.config);
+    element("#environment-version").textContent = `v${session.environment.version}`;
+    element("#model-family").textContent = session.environment.model_family;
+    element("#active-model-name").textContent = "Sesión manual · sin modelo";
+    element("#active-model-run").textContent = `Ambiente ${session.environment.level || configId}`;
+    element("#active-environment").textContent = `${session.environment.level || configId} · v${session.environment.version}`;
+    element("#mode-notice").textContent = "Control manual disponible sin cargar una Q-table.";
+    updateEpisodeView(session.state);
+    updateDeepLink();
+  } catch (error) {
+    showError(error);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function changeMode(mode: EpisodeMode): Promise<void> {
+  if (!activeLoad) {
+    showError(new ApiError("Inicia primero una sesión manual o carga un modelo.", 409));
+    return;
+  }
+  clearError();
+  if (trainingPollTimer !== null) {
+    window.clearTimeout(trainingPollTimer);
+    trainingPollTimer = null;
+  }
+  const trainingControls = element<HTMLDivElement>("#training-controls");
+  trainingControls.hidden = mode !== "entrenamiento";
+  if (mode === "entrenamiento") {
+    currentMode = mode;
+    modeSelect.value = mode;
+    element("#active-mode").textContent = modeLabels[mode].toUpperCase();
+    element("#mode-notice").textContent = "Inicia un trabajo asíncrono; el run y sus artefactos se guardan en MLflow.";
+    return;
+  }
   setBusy(true);
   try {
     const state = await resetEpisode(mode, episodeSeed);
@@ -445,9 +521,56 @@ async function changeMode(mode: EpisodeMode): Promise<void> {
     updateDeepLink();
     element("#mode-notice").textContent = mode === "manual"
       ? "Cada acción manual avanza exactamente un paso del ambiente."
-      : `La política ${modeLabels[mode]} selecciona acciones en Python.`;
+      : mode === "replay"
+        ? "Replay vuelve a ejecutar de forma determinista el modelo y ambiente cargados con la misma semilla."
+        : `La política ${modeLabels[mode]} selecciona acciones en Python.`;
   } catch (error) {
     modeSelect.value = currentMode;
+    showError(error);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function pollTraining(jobId: string): Promise<void> {
+  try {
+    const job: TrainingJob = await getTrainingStatus(jobId);
+    const progress = job.status === "RUNNING"
+      ? `Episodio ${job.episode}/${job.total_episodes} · ${job.cause || "en progreso"}`
+      : job.status === "FINISHED"
+        ? `Entrenamiento terminado · run ${job.run_id}`
+        : `Entrenamiento fallido · ${job.error || "causa no disponible"}`;
+    element("#training-status").textContent = progress;
+    if (job.status === "FINISHED") {
+      await refreshCatalog();
+      return;
+    }
+    if (job.status === "FAILED") {
+      showError(new ApiError(job.error || "El entrenamiento falló.", 500));
+      return;
+    }
+    trainingPollTimer = window.setTimeout(() => void pollTraining(jobId), 1500);
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function runTraining(): Promise<void> {
+  if (operationBusy) return;
+  clearError();
+  setBusy(true);
+  const profile = element<HTMLSelectElement>("#training-profile").value as "n1" | "n2" | "n3";
+  const episodes = Number(element<HTMLInputElement>("#training-episodes").value);
+  if (!Number.isInteger(episodes) || episodes < 1 || episodes > 15000) {
+    showError(new ApiError("El presupuesto debe estar entre 1 y 15000 episodios.", 422));
+    setBusy(false);
+    return;
+  }
+  try {
+    const job = await startTraining(profile, episodeSeed, episodes);
+    element("#training-status").textContent = `Trabajo ${job.job_id} iniciado · ${job.total_episodes} episodios`;
+    trainingPollTimer = window.setTimeout(() => void pollTraining(job.job_id), 1000);
+  } catch (error) {
     showError(error);
   } finally {
     setBusy(false);
@@ -472,6 +595,41 @@ async function advanceEpisode(action?: number): Promise<void> {
 }
 
 async function restoreDeepLink(link: EpisodeLink): Promise<void> {
+  const manual = /^manual-(baseline|n1|n2|n3)$/.exec(link.runId);
+  if (manual) {
+    restoringLink = true;
+    try {
+      const configId = manual[1] as "baseline" | "n1" | "n2" | "n3";
+      await startManualSession(configId, link.seed);
+      if (link.mode !== "manual") {
+        const reset = await resetEpisode(link.mode, link.seed);
+        currentMode = link.mode;
+        episodeActions = [];
+        episodeSteps = 0;
+        updateEpisodeView(reset);
+      }
+      if (link.mode === "manual") {
+        for (const action of link.actions) {
+          const restored = await stepEpisode(action);
+          episodeActions.push(action);
+          episodeSteps += 1;
+          updateEpisodeView(restored);
+        }
+      } else {
+        for (let index = 0; index < link.steps; index++) {
+          const restored = await stepEpisode();
+          episodeSteps += 1;
+          updateEpisodeView(restored);
+        }
+      }
+      updateDeepLink();
+    } catch (error) {
+      showError(error);
+    } finally {
+      restoringLink = false;
+    }
+    return;
+  }
   const run = catalogRuns.find((candidate) => candidate.run_id === link.runId);
   if (!run) {
     showError(new ApiError(`El run ${link.runId} no aparece en el catálogo.`, 404));
@@ -582,6 +740,24 @@ catalogBody.addEventListener("change", (event) => {
 modeSelect.addEventListener("change", () => {
   const mode = modeSelect.value as EpisodeMode;
   if (modes.includes(mode)) void changeMode(mode);
+});
+element<HTMLButtonElement>("#start-manual").addEventListener("click", () => {
+  void startManualSession();
+});
+element<HTMLButtonElement>("#start-training").addEventListener("click", () => {
+  void runTraining();
+});
+const trainingProfileSelect = element<HTMLSelectElement>("#training-profile");
+trainingProfileSelect.addEventListener("change", () => {
+  const selected = trainingProfileSelect.selectedOptions[0];
+  const episodeCount = selected.dataset.episodes;
+  if (episodeCount) element<HTMLInputElement>("#training-episodes").value = episodeCount;
+});
+element<HTMLFormElement>("#api-auth-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  setApiToken(element<HTMLInputElement>("#api-token").value.trim());
+  element<HTMLInputElement>("#api-token").value = "";
+  void refreshCatalog();
 });
 element<HTMLButtonElement>("#reset-episode").addEventListener("click", () => {
   void changeMode(currentMode);

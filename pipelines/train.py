@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 from importlib.metadata import version
 from pathlib import Path
+from typing import Callable
 
 import mlflow
 import numpy as np
@@ -166,6 +167,7 @@ def train_run(
     checkpoint_dir: str | Path = DEFAULT_CHECKPOINT_DIR,
     suite_path: str | Path | None = None,
     episodes_override: int | None = None,
+    progress_callback: Callable[[dict], None] | None = None,
 ) -> dict:
     profile, profile_file = load_profile(profile_path)
     experiment_id = str(profile["experiment"]["id"])
@@ -217,6 +219,8 @@ def train_run(
 
     with mlflow.start_run(run_name=run_name, tags=tags) as run:
         manifest_base["run_id"] = run.info.run_id
+        if progress_callback is not None:
+            progress_callback({"run_id": run.info.run_id, "status": "RUNNING"})
         try:
             environment_config = load_config(config_path)
             if str(environment_config.get("level", {}).get("id", level_id)) != level_id:
@@ -313,6 +317,16 @@ def train_run(
                     "training/success": float(training_metrics["success"]),
                     "training/epsilon": float(agent.eps),
                 }, step=episode_index)
+                if progress_callback is not None:
+                    progress_callback({
+                        "episode": episode_index,
+                        "total_episodes": total_episodes,
+                        "return": episode_return,
+                        "success": training_metrics["success"],
+                        "epsilon": float(agent.eps),
+                        "cause": info["cause"],
+                        "steps": int(environment.steps),
+                    })
 
                 if episode_index % int(training["evaluation_interval"]) == 0 or episode_index == total_episodes:
                     current_q_table = {state_key: value.copy() for state_key, value in agent.q.items()}

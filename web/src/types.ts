@@ -47,6 +47,7 @@ export interface CatalogResponse {
 }
 
 export interface LoadResponse {
+  session_id: string;
   model: {
     run_id: string;
     sha256: string;
@@ -62,6 +63,32 @@ export interface LoadResponse {
   config: DroneConfig;
   config_sha256: string;
   mode: EpisodeMode;
+}
+
+export interface ManualSessionResponse {
+  session_id: string;
+  environment: LoadResponse["environment"];
+  config: DroneConfig;
+  mode: "manual";
+  state: EpisodeState;
+}
+
+export interface TrainingJob {
+  job_id: string;
+  status: "RUNNING" | "FINISHED" | "FAILED";
+  profile_id: "n1" | "n2" | "n3";
+  seed: number;
+  episode: number;
+  total_episodes: number;
+  return?: number;
+  success?: boolean;
+  epsilon?: number;
+  cause?: string;
+  steps?: number;
+  run_id: string | null;
+  manifest_path?: string;
+  checkpoint_path?: string;
+  error: string | null;
 }
 
 export interface DroneConfig {
@@ -103,6 +130,7 @@ export interface EpisodeState {
 export interface EvaluationResponse {
   evaluation_id: string;
   run_id: string;
+  evaluation_run_id: string;
   result_path: string;
   result: {
     cases: Array<{
