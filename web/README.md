@@ -11,12 +11,14 @@ npm ci
 npm run dev
 ```
 
-Inicia la API Python en otra terminal. En desarrollo, si
-`VITE_API_BASE_URL` no está definida, el cliente usa `http://127.0.0.1:8000`.
-Para una API remota crea `.env.local` a partir de `.env.example`. Si la API
-requiere clave compartida, ingrésala en el campo de la cabecera; el navegador
-la guarda solo en `sessionStorage`. Cada pestaña obtiene una sesión propia de
-simulación.
+Define `VITE_API_BASE_URL` en `.env.local` para desarrollo; no hay una URL
+predeterminada en el cliente. Para una API local, usa
+`http://127.0.0.1:8000`; para una API remota, usa su URL HTTPS. La compilación
+de producción usa `web/.env.production`, y Vercel debe tener
+`VITE_API_BASE_URL=https://drone-rescue-api.onrender.com` en sus variables de
+entorno para mantener el mismo destino. Si la API requiere clave compartida,
+ingrésala en el campo de la cabecera; el navegador la guarda solo en
+`sessionStorage`. Cada pestaña obtiene una sesión propia de simulación.
 
 El modo manual puede iniciar el ambiente sin modelo. Replay reproduce el
 modelo/ambiente cargados de forma determinista con la semilla elegida.

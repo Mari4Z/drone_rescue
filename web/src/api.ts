@@ -10,10 +10,7 @@ import type {
 } from "./types";
 
 const configuredApiUrl = import.meta.env.VITE_API_BASE_URL?.trim();
-const apiBaseUrl = (configuredApiUrl || (import.meta.env.DEV ? "http://127.0.0.1:8000" : "")).replace(
-  /\/+$/,
-  "",
-);
+const apiBaseUrl = (configuredApiUrl || "").replace(/\/+$/, "");
 const invalidProductionApiUrl = (() => {
   if (!import.meta.env.PROD || !apiBaseUrl) return null;
   try {
