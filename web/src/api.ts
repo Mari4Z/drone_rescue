@@ -5,7 +5,8 @@ import type {
   EpisodeState,
   EvaluationResponse,
   LoadResponse,
-  TrainingStatus,
+  ManualSessionResponse,
+  TrainingJob,
 } from "./types";
 
 const configuredApiUrl = import.meta.env.VITE_API_BASE_URL?.trim();
@@ -42,20 +43,31 @@ export class ApiError extends Error {
   }
 }
 
+export function setApiToken(token: string): void {
+  if (token) sessionStorage.setItem("drone-rescue-api-token", token);
+  else sessionStorage.removeItem("drone-rescue-api-token");
+}
+
+export function setApiSessionId(sessionId: string): void {
+  sessionStorage.setItem("drone-rescue-session-id", sessionId);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (invalidProductionApiUrl) throw new ApiError(invalidProductionApiUrl, 0);
   if (!apiBaseUrl) {
     throw new ApiError("Configura VITE_API_BASE_URL para conectar con la API desplegada.", 0);
   }
 
+  const apiToken = sessionStorage.getItem("drone-rescue-api-token");
+  const sessionId = sessionStorage.getItem("drone-rescue-session-id");
   let response: Response;
   try {
     response = await fetch(`${apiBaseUrl}${path}`, {
       ...init,
       headers: {
         Accept: "application/json",
-        // ngrok responde con una página HTML de aviso si no se indica esto; otros servidores lo ignoran
-        "ngrok-skip-browser-warning": "1",
+        ...(apiToken ? { "X-API-Key": apiToken } : {}),
+        ...(sessionId ? { "X-Drone-Session": sessionId } : {}),
         ...(init?.body ? { "Content-Type": "application/json" } : {}),
         ...init?.headers,
       },
@@ -83,9 +95,17 @@ export function getCatalog(): Promise<CatalogResponse> {
 }
 
 export function loadRun(runId: string, seed: number): Promise<LoadResponse> {
+  const sessionId = sessionStorage.getItem("drone-rescue-session-id") || crypto.randomUUID();
   return request("/load", {
     method: "POST",
-    body: JSON.stringify({ run_id: runId, seed }),
+    body: JSON.stringify({ run_id: runId, seed, session_id: sessionId }),
+  });
+}
+
+export function createManualSession(configId: "baseline" | "n1" | "n2" | "n3", seed: number): Promise<ManualSessionResponse> {
+  return request("/session", {
+    method: "POST",
+    body: JSON.stringify({ config_id: configId, seed }),
   });
 }
 
@@ -101,17 +121,19 @@ export function stepEpisode(action?: number): Promise<EpisodeState> {
   return request(`/episode/step${query}`);
 }
 
-export function getTraining(): Promise<TrainingStatus> {
-  return request("/training");
+export function evaluateModel(): Promise<EvaluationResponse> {
+  return request("/evaluate", { method: "POST" });
 }
 
-export function startTraining(profile: string, seed: number, timesteps: number): Promise<TrainingStatus> {
+export function startTraining(profileId: string, seed: number, budget: number): Promise<TrainingJob> {
+  // Q-learning se mide en episodios; PPO, en pasos del ambiente
+  const field = profileId.startsWith("ppo_") ? "timesteps" : "episodes";
   return request("/training", {
     method: "POST",
-    body: JSON.stringify({ profile, seed, timesteps }),
+    body: JSON.stringify({ profile_id: profileId, seed, [field]: budget }),
   });
 }
 
-export function evaluateModel(): Promise<EvaluationResponse> {
-  return request("/evaluate", { method: "POST" });
+export function getTrainingStatus(jobId: string): Promise<TrainingJob> {
+  return request(`/training/${encodeURIComponent(jobId)}`);
 }

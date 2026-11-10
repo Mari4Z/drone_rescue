@@ -1,12 +1,15 @@
 import "./style.css";
 import {
   ApiError,
+  createManualSession,
   evaluateModel,
-  getTraining,
-  startTraining,
+  getTrainingStatus,
   getCatalog,
   loadRun,
   resetEpisode,
+  setApiSessionId,
+  setApiToken,
+  startTraining,
   stepEpisode,
 } from "./api";
 import type {
@@ -14,9 +17,10 @@ import type {
   ConfigChange,
   EpisodeMode,
   EpisodeState,
-  TrainingStatus,
   EvaluationResponse,
   LoadResponse,
+  ManualSessionResponse,
+  TrainingJob,
 } from "./types";
 
 // Carga visual inicial de la barra de puntos: puntos = POINTS_START + retorno del episodio.
@@ -69,6 +73,11 @@ app.innerHTML = `
       </a>
       <div class="topbar-right">
         <span class="authority"><i></i> SIMULACIÓN PYTHON · AUTORIDAD</span>
+        <form class="api-auth" id="api-auth-form">
+          <label class="sr-only" for="api-token">Clave compartida de la API</label>
+          <input id="api-token" type="password" autocomplete="current-password" placeholder="Clave de API (si aplica)">
+          <button class="button button-secondary" type="submit">Conectar</button>
+        </form>
         <span class="service-indicator" id="service-status">Conectando API…</span>
       </div>
     </header>
@@ -134,6 +143,22 @@ app.innerHTML = `
             <select id="mode-select" aria-label="Modo de operación">
               ${modes.map((mode) => `<option value="${mode}">${modeLabels[mode]}</option>`).join("")}
             </select>
+            <button class="button button-secondary manual-start" id="start-manual" type="button">Iniciar sesión manual sin modelo</button>
+            <div class="training-controls" id="training-controls" hidden>
+              <label for="training-profile">Perfil de entrenamiento</label>
+              <select id="training-profile">
+                <option value="n1" data-episodes="5000">N1 · misión base · Q-learning</option>
+                <option value="n2" data-episodes="10000">N2 · más decisiones · Q-learning</option>
+                <option value="n3" data-episodes="15000">N3 · operación exigente · Q-learning</option>
+                <option value="ppo_v3b_n1" data-episodes="100000">N1 · PPO v3 (pasos)</option>
+                <option value="ppo_v3b_n2" data-episodes="100000">N2 · PPO v3 (pasos)</option>
+                <option value="ppo_v3b_n3" data-episodes="100000">N3 · PPO v3 (pasos)</option>
+              </select>
+              <label for="training-episodes" id="training-budget-label">Episodios</label>
+              <input id="training-episodes" type="number" min="1" max="300000" step="500" value="5000">
+              <button class="button button-primary" id="start-training" type="button">Iniciar entrenamiento</button>
+              <small id="training-status">El entrenamiento se registra como un nuevo run MLflow.</small>
+            </div>
             <div class="control-actions">
               <button class="button button-secondary" id="reset-episode" type="button" disabled><span>↻</span> Reiniciar episodio</button>
               <button class="button button-primary" id="evaluate-model" type="button" disabled><span>◉</span> Ejecutar evaluación</button>
@@ -150,19 +175,6 @@ app.innerHTML = `
             </div>
             <button class="button button-secondary auto-play" id="auto-play" type="button" disabled hidden>▶ Reproducir episodio</button>
             <div class="training-notice" id="mode-notice">Elige un run compatible en el catálogo para comenzar.</div>
-          </section>
-
-          <section class="panel training-panel">
-            <div class="panel-heading"><div><p class="eyebrow">PIPELINE REAL · MLFLOW</p><h2>Entrenamiento</h2></div><span class="mode-badge" id="training-state">SIN ACTIVIDAD</span></div>
-            <p class="training-help">Lanza <code>pipelines/train_ppo.py</code> en un proceso aparte. Crea un run nuevo con su modelo y manifiesto. La escena no cambia los pesos.</p>
-            <div class="training-form">
-              <label>Perfil<select id="training-profile" aria-label="Perfil de entrenamiento"></select></label>
-              <label>Semilla<input id="training-seed" type="number" value="0" min="0"></label>
-              <label>Pasos<input id="training-timesteps" type="number" value="50000" min="1000" step="1000"></label>
-            </div>
-            <button class="button button-primary" id="start-training" type="button">▶ Iniciar entrenamiento</button>
-            <div class="meter" id="training-meter" role="meter" aria-label="Progreso del entrenamiento" aria-valuemin="0" aria-valuemax="100"><i></i></div>
-            <small class="training-detail" id="training-detail">Sin entrenamiento en esta sesión.</small>
           </section>
 
           <section class="panel result-panel" id="evaluation-panel" hidden>
@@ -213,7 +225,7 @@ const modeSelect = element<HTMLSelectElement>("#mode-select");
 const selectedRuns = new Set<string>();
 let catalogRuns: CatalogRun[] = [];
 let activeRun: CatalogRun | null = null;
-let activeLoad: LoadResponse | null = null;
+let activeLoad: LoadResponse | ManualSessionResponse | null = null;
 let episode: EpisodeState | null = null;
 let episodeSeed = 0;
 let episodeActions: number[] = [];
@@ -221,6 +233,7 @@ let episodeSteps = 0;
 let currentMode: EpisodeMode = "manual";
 let operationBusy = false;
 let restoringLink = false;
+let trainingPollTimer: number | null = null;
 
 function showError(error: unknown): void {
   const status = error instanceof ApiError && error.status ? `HTTP ${error.status} · ` : "";
@@ -242,11 +255,13 @@ function setBusy(busy: boolean): void {
     button.disabled = busy || !activeLoad || currentMode !== "manual" || Boolean(episode?.terminated || episode?.truncated);
   });
   element<HTMLButtonElement>("#reset-episode").disabled = busy || !activeLoad;
-  element<HTMLButtonElement>("#evaluate-model").disabled = busy || !activeLoad;
-  const autoPlayButton = element<HTMLButtonElement>("#auto-play");
-  autoPlayButton.hidden = currentMode === "manual";
-  autoPlayButton.disabled = !activeLoad || Boolean(episode?.terminated || episode?.truncated);
+  element<HTMLButtonElement>("#evaluate-model").disabled = busy || !activeRun;
   modeSelect.disabled = busy || !activeLoad;
+  element<HTMLButtonElement>("#start-manual").disabled = busy;
+  element<HTMLButtonElement>("#start-training").disabled = busy;
+  const autoPlayButton = element<HTMLButtonElement>("#auto-play");
+  autoPlayButton.hidden = currentMode === "manual" || currentMode === "entrenamiento";
+  autoPlayButton.disabled = !activeLoad || Boolean(episode?.terminated || episode?.truncated);
 }
 
 function formatNumber(value: number | null | undefined, digits = 2): string {
@@ -325,7 +340,7 @@ function renderCatalog(): void {
       <td><span class="level-pill">${escapeHtml(run.level)}</span><small>env ${escapeHtml(run.environment_version)}</small><small>${escapeHtml(run.algorithm)} · ${escapeHtml(run.model_family)}</small></td>
       <td class="changes-cell">${formatChanges(run.changes_vs_baseline)}${details}</td>
       <td><code class="run-id">${escapeHtml(run.run_id)}</code><small>semilla ${escapeHtml(run.seed)}</small></td>
-      <td><strong>${formatNumber(run.mean_steps, 1)} pasos</strong><small>${formatNumber(run.duration_seconds, 1)} s · ${escapeHtml(run.training_timesteps ? `${run.training_timesteps} pasos` : `${run.training_episodes ?? "—"} ep.`)}</small></td>
+      <td><strong>${formatNumber(run.mean_steps, 1)} pasos</strong><small>${formatNumber(run.duration_seconds, 1)} s · ${escapeHtml(run.training_episodes ?? "—")} ep.</small></td>
       <td><span class="metric-chip">${escapeHtml(metrics.primary)}</span><small>${escapeHtml(metrics.secondary)}</small><small>${escapeHtml(run.checkpoint_status || "sin estado de modelo")}</small></td>
       <td><span class="status ${statusClass}">${escapeHtml(run.status)}</span><small>${escapeHtml(run.model_version ? `v${run.model_version}` : "sin versión")}</small></td>
       <td><code class="commit">${escapeHtml(run.commit ? run.commit.slice(0, 8) : "—")}</code></td>
@@ -351,6 +366,26 @@ function setMeter(selector: string, fraction: number): void {
   meter.setAttribute("aria-valuenow", String(percent));
   meter.dataset.level = percent > 50 ? "high" : percent > 20 ? "mid" : "low";
   element<HTMLElement>(`${selector} i`).style.width = `${percent}%`;
+}
+
+// Avanza el episodio paso a paso en los modos donde la política elige la acción.
+// El ritmo solo afecta a la animación: cada paso sigue siendo una transición de la API.
+const AUTO_PLAY_MS = 120;
+let autoPlaying = false;
+
+function setAutoPlay(playing: boolean): void {
+  autoPlaying = playing;
+  element("#auto-play").textContent = playing ? "⏸ Pausar" : "▶ Reproducir episodio";
+}
+
+async function autoPlayLoop(): Promise<void> {
+  while (autoPlaying && activeLoad && currentMode !== "manual" && currentMode !== "entrenamiento"
+    && !episode?.terminated && !episode?.truncated) {
+    await advanceEpisode();
+    if (!errorBanner.hidden) break;
+    await new Promise((resolve) => window.setTimeout(resolve, AUTO_PLAY_MS));
+  }
+  setAutoPlay(false);
 }
 
 function updateEpisodeView(state: EpisodeState): void {
@@ -382,9 +417,11 @@ function updateEpisodeView(state: EpisodeState): void {
 }
 
 function updateDeepLink(): void {
-  if (!activeRun || restoringLink) return;
+  if (currentMode === "entrenamiento" || restoringLink) return;
+  const runId = activeRun?.run_id ?? episode?.run_id;
+  if (!runId) return;
   const params = new URLSearchParams({
-    run: activeRun.run_id,
+    run: runId,
     seed: String(episodeSeed),
     mode: currentMode,
     steps: String(episodeSteps),
@@ -392,7 +429,7 @@ function updateDeepLink(): void {
   if (currentMode === "manual" && episodeActions.length) {
     params.set("actions", episodeActions.join(","));
   }
-  history.replaceState(null, "", `#/run/${encodeURIComponent(activeRun.run_id)}?${params}`);
+  history.replaceState(null, "", `#/run/${encodeURIComponent(runId)}?${params}`);
 }
 
 function readDeepLink(): EpisodeLink | null {
@@ -414,6 +451,7 @@ function readDeepLink(): EpisodeLink | null {
     || steps < 0
     || !mode
     || !modes.includes(mode)
+    || mode === "entrenamiento"
     || actions.some((action) => !Number.isInteger(action) || action < 0 || action > 6)
   ) return null;
   return { runId, seed, mode, steps, actions };
@@ -424,6 +462,7 @@ async function loadSelectedRun(run: CatalogRun, seed = run.seed ?? 0, link?: Epi
   setBusy(true);
   try {
     const loaded = await loadRun(run.run_id, seed);
+    setApiSessionId(loaded.session_id);
     activeRun = run;
     activeLoad = loaded;
     episodeSeed = seed;
@@ -432,7 +471,7 @@ async function loadSelectedRun(run: CatalogRun, seed = run.seed ?? 0, link?: Epi
     scene.setEnvironment(loaded.config);
     element("#environment-version").textContent = `v${loaded.environment.version}`;
     element("#model-family").textContent = loaded.environment.model_family;
-    element("#active-model-name").textContent = `${loaded.environment.algorithm.toUpperCase()} · ${run.experiment_id || run.level || run.experiment || "modelo"}`;
+    element("#active-model-name").textContent = `${(loaded.environment.algorithm || "q_learning").toUpperCase()} · ${run.experiment_id || run.level || "modelo"}`;
     element("#active-model-run").textContent = `${run.run_id} · ${run.model_version ? `v${run.model_version}` : "sin versión"} · ${run.model_sha256?.slice(0, 12) ?? "SHA no disponible"}`;
     element("#active-environment").textContent = `${loaded.environment.level || "—"} · v${loaded.environment.version}`;
     element<HTMLButtonElement>("#reset-episode").disabled = false;
@@ -470,90 +509,54 @@ async function loadSelectedRun(run: CatalogRun, seed = run.seed ?? 0, link?: Epi
   }
 }
 
-// Avanza el episodio paso a paso en los modos donde la política elige la acción.
-// El ritmo solo afecta a la animación: cada paso sigue siendo una transición de la API.
-const AUTO_PLAY_MS = 120;
-let autoPlaying = false;
-
-function setAutoPlay(playing: boolean): void {
-  autoPlaying = playing;
-  element("#auto-play").textContent = playing ? "⏸ Pausar" : "▶ Reproducir episodio";
-}
-
-async function autoPlayLoop(): Promise<void> {
-  while (autoPlaying && activeLoad && currentMode !== "manual" && !episode?.terminated && !episode?.truncated) {
-    await advanceEpisode();
-    if (document.querySelector("#error-banner:not([hidden])")) break;
-    await new Promise((resolve) => window.setTimeout(resolve, AUTO_PLAY_MS));
-  }
-  setAutoPlay(false);
-}
-
-function modeNotice(mode: EpisodeMode): string {
-  if (mode === "manual") return "Cada acción manual avanza exactamente un paso del ambiente.";
-  if (mode === "evaluacion") return "Modelo congelado, sin exploración.";
-  if (mode === "entrenamiento") return "Política cargada con exploración: así actúa al entrenar. No cambia sus pesos; para entrenar usa el panel Entrenamiento.";
-  return `La política ${modeLabels[mode]} selecciona acciones en Python.`;
-}
-
-let trainingTimer: number | undefined;
-
-function renderTraining(status: TrainingStatus): void {
-  const profile = element<HTMLSelectElement>("#training-profile");
-  if (!profile.options.length) {
-    profile.innerHTML = status.profiles.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("");
-  }
-  const labels = { idle: "SIN ACTIVIDAD", running: "ENTRENANDO", finished: "TERMINADO", failed: "FALLÓ" };
-  element("#training-state").textContent = labels[status.state];
-  const running = status.state === "running";
-  element<HTMLButtonElement>("#start-training").disabled = running;
-  const done = status.state === "finished" ? 1 : (status.progress?.timesteps ?? 0) / (status.timesteps || 1);
-  setMeter("#training-meter", status.state === "idle" ? 0 : done);
-  const success = status.progress?.["evaluation/success"];
-  const detail = element("#training-detail");
-  if (status.state === "idle") detail.textContent = "Sin entrenamiento en esta sesión.";
-  else if (status.state === "failed") detail.textContent = `Falló; queda como run con diagnóstico. ${status.error ?? ""}`;
-  else {
-    detail.textContent = `${status.profile} · semilla ${status.seed} · ${status.progress?.timesteps ?? 0}/${status.timesteps} pasos · ${status.elapsed_s} s`
-      + (typeof success === "number" ? ` · éxito en evaluación ${(success * 100).toFixed(0)}%` : "")
-      + (status.run_id ? ` · run ${status.run_id}` : "");
-  }
-}
-
-async function pollTraining(): Promise<void> {
-  try {
-    const status = await getTraining();
-    renderTraining(status);
-    window.clearTimeout(trainingTimer);
-    if (status.state === "running") {
-      trainingTimer = window.setTimeout(() => void pollTraining(), 3000);
-    } else if (status.state === "finished" && status.run_id && !catalogRuns.some((run) => run.run_id === status.run_id)) {
-      await refreshCatalog();
-    }
-  } catch (error) {
-    showError(error);
-  }
-}
-
-async function launchTraining(): Promise<void> {
+async function startManualSession(configId: "baseline" | "n1" | "n2" | "n3" = "baseline", seed = 0): Promise<void> {
   clearError();
+  setBusy(true);
   try {
-    const status = await startTraining(
-      element<HTMLSelectElement>("#training-profile").value,
-      Number(element<HTMLInputElement>("#training-seed").value),
-      Number(element<HTMLInputElement>("#training-timesteps").value),
-    );
-    renderTraining(status);
-    void pollTraining();
+    const session = await createManualSession(configId, seed);
+    setApiSessionId(session.session_id);
+    activeRun = null;
+    activeLoad = session;
+    episodeSeed = seed;
+    episodeActions = [];
+    episodeSteps = 0;
+    currentMode = "manual";
+    scene.setEnvironment(session.config);
+    element("#environment-version").textContent = `v${session.environment.version}`;
+    element("#model-family").textContent = session.environment.model_family;
+    element("#active-model-name").textContent = "Sesión manual · sin modelo";
+    element("#active-model-run").textContent = `Ambiente ${session.environment.level || configId}`;
+    element("#active-environment").textContent = `${session.environment.level || configId} · v${session.environment.version}`;
+    element("#mode-notice").textContent = "Control manual disponible sin cargar una Q-table.";
+    updateEpisodeView(session.state);
+    updateDeepLink();
   } catch (error) {
     showError(error);
+  } finally {
+    setBusy(false);
   }
 }
 
 async function changeMode(mode: EpisodeMode): Promise<void> {
-  if (!activeLoad) return;
+  if (!activeLoad) {
+    showError(new ApiError("Inicia primero una sesión manual o carga un modelo.", 409));
+    return;
+  }
   setAutoPlay(false);
   clearError();
+  if (trainingPollTimer !== null) {
+    window.clearTimeout(trainingPollTimer);
+    trainingPollTimer = null;
+  }
+  const trainingControls = element<HTMLDivElement>("#training-controls");
+  trainingControls.hidden = mode !== "entrenamiento";
+  if (mode === "entrenamiento") {
+    currentMode = mode;
+    modeSelect.value = mode;
+    element("#active-mode").textContent = modeLabels[mode].toUpperCase();
+    element("#mode-notice").textContent = "Inicia un trabajo asíncrono; el run y sus artefactos se guardan en MLflow.";
+    return;
+  }
   setBusy(true);
   try {
     const state = await resetEpisode(mode, episodeSeed);
@@ -562,9 +565,62 @@ async function changeMode(mode: EpisodeMode): Promise<void> {
     episodeSteps = 0;
     updateEpisodeView(state);
     updateDeepLink();
-    element("#mode-notice").textContent = modeNotice(mode);
+    element("#mode-notice").textContent = mode === "manual"
+      ? "Cada acción manual avanza exactamente un paso del ambiente."
+      : mode === "replay"
+        ? "Replay vuelve a ejecutar de forma determinista el modelo y ambiente cargados con la misma semilla."
+        : `La política ${modeLabels[mode]} selecciona acciones en Python.`;
   } catch (error) {
     modeSelect.value = currentMode;
+    showError(error);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function pollTraining(jobId: string): Promise<void> {
+  try {
+    const job: TrainingJob = await getTrainingStatus(jobId);
+    const success = typeof job.evaluation_success === "number" ? ` · éxito en evaluación ${(job.evaluation_success * 100).toFixed(0)}%` : "";
+    const progress = job.status === "RUNNING"
+      ? job.algorithm === "ppo"
+        ? `Paso ${job.timesteps ?? 0}/${job.total_timesteps}${success}`
+        : `Episodio ${job.episode}/${job.total_episodes} · ${job.cause || "en progreso"}`
+      : job.status === "FINISHED"
+        ? `Entrenamiento terminado · run ${job.run_id}`
+        : `Entrenamiento fallido · ${job.error || "causa no disponible"}`;
+    element("#training-status").textContent = progress;
+    if (job.status === "FINISHED") {
+      await refreshCatalog();
+      return;
+    }
+    if (job.status === "FAILED") {
+      showError(new ApiError(job.error || "El entrenamiento falló.", 500));
+      return;
+    }
+    trainingPollTimer = window.setTimeout(() => void pollTraining(jobId), 1500);
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function runTraining(): Promise<void> {
+  if (operationBusy) return;
+  clearError();
+  setBusy(true);
+  const profile = element<HTMLSelectElement>("#training-profile").value;
+  const episodes = Number(element<HTMLInputElement>("#training-episodes").value);
+  const isPpo = profile.startsWith("ppo_");
+  if (!Number.isInteger(episodes) || episodes < 1 || episodes > (isPpo ? 300000 : 15000)) {
+    showError(new ApiError(isPpo ? "PPO admite hasta 300000 pasos." : "El presupuesto debe estar entre 1 y 15000 episodios.", 422));
+    setBusy(false);
+    return;
+  }
+  try {
+    const job = await startTraining(profile, episodeSeed, episodes);
+    element("#training-status").textContent = `Trabajo ${job.job_id} iniciado · ${isPpo ? `${job.total_timesteps} pasos` : `${job.total_episodes} episodios`}`;
+    trainingPollTimer = window.setTimeout(() => void pollTraining(job.job_id), 1000);
+  } catch (error) {
     showError(error);
   } finally {
     setBusy(false);
@@ -589,6 +645,41 @@ async function advanceEpisode(action?: number): Promise<void> {
 }
 
 async function restoreDeepLink(link: EpisodeLink): Promise<void> {
+  const manual = /^manual-(baseline|n1|n2|n3)$/.exec(link.runId);
+  if (manual) {
+    restoringLink = true;
+    try {
+      const configId = manual[1] as "baseline" | "n1" | "n2" | "n3";
+      await startManualSession(configId, link.seed);
+      if (link.mode !== "manual") {
+        const reset = await resetEpisode(link.mode, link.seed);
+        currentMode = link.mode;
+        episodeActions = [];
+        episodeSteps = 0;
+        updateEpisodeView(reset);
+      }
+      if (link.mode === "manual") {
+        for (const action of link.actions) {
+          const restored = await stepEpisode(action);
+          episodeActions.push(action);
+          episodeSteps += 1;
+          updateEpisodeView(restored);
+        }
+      } else {
+        for (let index = 0; index < link.steps; index++) {
+          const restored = await stepEpisode();
+          episodeSteps += 1;
+          updateEpisodeView(restored);
+        }
+      }
+      updateDeepLink();
+    } catch (error) {
+      showError(error);
+    } finally {
+      restoringLink = false;
+    }
+    return;
+  }
   const run = catalogRuns.find((candidate) => candidate.run_id === link.runId);
   if (!run) {
     showError(new ApiError(`El run ${link.runId} no aparece en el catálogo.`, 404));
@@ -700,13 +791,9 @@ modeSelect.addEventListener("change", () => {
   const mode = modeSelect.value as EpisodeMode;
   if (modes.includes(mode)) void changeMode(mode);
 });
-element<HTMLButtonElement>("#reset-episode").addEventListener("click", () => {
-  void changeMode(currentMode);
+element<HTMLButtonElement>("#start-manual").addEventListener("click", () => {
+  void startManualSession();
 });
-element<HTMLButtonElement>("#evaluate-model").addEventListener("click", () => {
-  void runEvaluation();
-});
-element<HTMLButtonElement>("#start-training").addEventListener("click", () => void launchTraining());
 element<HTMLButtonElement>("#auto-play").addEventListener("click", () => {
   if (autoPlaying) {
     setAutoPlay(false);
@@ -714,6 +801,33 @@ element<HTMLButtonElement>("#auto-play").addEventListener("click", () => {
   }
   setAutoPlay(true);
   void autoPlayLoop();
+});
+element<HTMLSelectElement>("#training-profile").addEventListener("change", (event) => {
+  const option = (event.target as HTMLSelectElement).selectedOptions[0];
+  const isPpo = option.value.startsWith("ppo_");
+  element("#training-budget-label").textContent = isPpo ? "Pasos" : "Episodios";
+  element<HTMLInputElement>("#training-episodes").value = option.dataset.episodes ?? "5000";
+});
+element<HTMLButtonElement>("#start-training").addEventListener("click", () => {
+  void runTraining();
+});
+const trainingProfileSelect = element<HTMLSelectElement>("#training-profile");
+trainingProfileSelect.addEventListener("change", () => {
+  const selected = trainingProfileSelect.selectedOptions[0];
+  const episodeCount = selected.dataset.episodes;
+  if (episodeCount) element<HTMLInputElement>("#training-episodes").value = episodeCount;
+});
+element<HTMLFormElement>("#api-auth-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  setApiToken(element<HTMLInputElement>("#api-token").value.trim());
+  element<HTMLInputElement>("#api-token").value = "";
+  void refreshCatalog();
+});
+element<HTMLButtonElement>("#reset-episode").addEventListener("click", () => {
+  void changeMode(currentMode);
+});
+element<HTMLButtonElement>("#evaluate-model").addEventListener("click", () => {
+  void runEvaluation();
 });
 element<HTMLButtonElement>("#compare-runs").addEventListener("click", renderComparison);
 element<HTMLButtonElement>("#refresh-catalog").addEventListener("click", () => void refreshCatalog());
@@ -726,4 +840,3 @@ window.addEventListener("hashchange", () => {
 window.addEventListener("beforeunload", () => scene.dispose(), { once: true });
 
 void refreshCatalog();
-void pollTraining();

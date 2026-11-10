@@ -132,10 +132,12 @@ def mission_score(episodes: list[dict]) -> tuple:
 class ProgressCallback(BaseCallback):
     """Curvas separadas de entrenamiento (con exploración) y evaluación (sin ella)."""
 
-    def __init__(self, config_path: Path, family: str, seeds: list[int], every: int, best_path: Path, status_path: Path | None):
+    def __init__(self, config_path: Path, family: str, seeds: list[int], every: int, best_path: Path,
+                 status_path: Path | None, progress_callback=None):
         super().__init__()
         self.config_path, self.family, self.seeds, self.every = config_path, family, seeds, every
         self.best_path, self.status_path = best_path, status_path
+        self.progress_callback = progress_callback
         self.next_eval, self.best, self.best_metrics = every, None, None
         self.recent = deque(maxlen=200)
         self.evaluation_curve, self.training_curve = [], []
@@ -183,6 +185,9 @@ class ProgressCallback(BaseCallback):
         print(json.dumps(line), flush=True)
         if self.status_path:
             self.status_path.write_text(json.dumps(line), encoding="utf-8")
+        if self.progress_callback is not None:
+            self.progress_callback({"timesteps": step, "evaluation_success": evaluation["evaluation/success"],
+                                    "evaluation_delivered": evaluation["evaluation/delivered"]})
 
 
 def train_run(
@@ -196,6 +201,7 @@ def train_run(
     timesteps_override: int | None = None,
     allow_dirty: bool = False,
     status_path: str | Path | None = None,
+    progress_callback=None,
 ) -> dict:
     profile, profile_file = load_ppo_profile(profile_path)
     git_commit = _git("rev-parse", "HEAD")
@@ -261,6 +267,8 @@ def train_run(
     with mlflow.start_run(run_name=f"{experiment_id}-seed-{int(seed)}", tags=tags) as run:
         run_id = run.info.run_id
         manifest["run_id"] = run_id
+        if progress_callback is not None:
+            progress_callback({"run_id": run_id, "status": "RUNNING"})
         started = time.time()
         vector_env = None
         try:
@@ -308,6 +316,7 @@ def train_run(
                     config_path, family, [int(s) for s in training["evaluation_seeds"]],
                     int(training["evaluation_every"]), temp / "best.zip",
                     Path(status_path) if status_path else None,
+                    progress_callback,
                 )
                 model.learn(int(training["timesteps"]), callback=callback, reset_num_timesteps=not parent_run_id)
                 final_path = temp / "final.zip"

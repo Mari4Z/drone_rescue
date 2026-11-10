@@ -150,18 +150,49 @@ def test_api_loads_and_evaluates_real_ppo_run(tmp_path, monkeypatch):
     monkeypatch.setattr(api, "runtime", api.ApiRuntime())
     monkeypatch.setattr(api, "MANIFEST_DIR", tmp_path / "manifests")
     monkeypatch.setattr(api, "PROJECT_ROOT", Path(repo))
-    client = TestClient(api._create_app(production=False, cors_origins=[]))
+    client = TestClient(api._create_app(production=False, cors_origins=[], api_token=""))
     loaded = client.post("/load", json={"run_id": result["run_id"], "seed": 0})
     assert loaded.status_code == 200, loaded.text
     assert loaded.json()["environment"]["model_family"] == "drone-rescue-v3"
     assert loaded.json()["environment"]["algorithm"] == "ppo"
-    assert client.post("/episode/reset", json={"mode": "evaluacion", "seed": 0}).status_code == 200
-    step = client.get("/episode/step").json()
+    session = {"X-Drone-Session": loaded.json()["session_id"]}
+    assert client.post("/episode/reset", json={"mode": "evaluacion", "seed": 0}, headers=session).status_code == 200
+    step = client.get("/episode/step", headers=session).json()
     assert step["telemetry"]["steps"] == 2 and step["model_family"] == "drone-rescue-v3"
-    assert client.post("/episode/reset", json={"mode": "entrenamiento", "seed": 0}).status_code == 200
-    assert client.get("/episode/step").status_code == 200
-    assert client.post("/episode/reset", json={"mode": "manual", "seed": 0}).status_code == 200
-    assert client.get("/episode/step", params={"action": 4}).json()["telemetry"]["steps"] == 1
+    assert step["episode_return"] == pytest.approx(step["reward"])
+    assert client.post("/episode/reset", json={"mode": "manual", "seed": 0}, headers=session).status_code == 200
+    assert client.get("/episode/step", params={"action": 4}, headers=session).json()["telemetry"]["steps"] == 1
     catalog = {run["run_id"]: run for run in client.get("/catalog").json()["runs"]}
     assert catalog[result["run_id"]]["algorithm"] == "ppo"
-    assert client.get("/version").json()["served_model"]["model_family"] == "drone-rescue-v3"
+    served = client.get("/version", headers=session).json()["served_model"]
+    assert served["model_family"] == "drone-rescue-v3" and served["run_id"] == result["run_id"]
+    assert client.get("/version").json()["served_model"] is None
+
+
+def test_api_rejects_ppo_training_without_or_over_budget(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from api import main as api
+
+    monkeypatch.setattr(api, "runtime", api.ApiRuntime())
+    client = TestClient(api._create_app(production=False, cors_origins=[], api_token=""))
+    assert client.post("/training", json={"profile_id": "ppo_v3b_n1"}).status_code == 422
+    assert client.post("/training", json={"profile_id": "ppo_v3b_n1", "timesteps": 10**9}).status_code == 422
+    assert client.post("/training", json={"profile_id": "../secreto", "timesteps": 5000}).status_code == 422
+    assert client.post("/training", json={"profile_id": "ppo_noexiste_n1", "timesteps": 5000}).status_code == 404
+
+
+def test_api_recommended_lists_published_versions(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from api import main as api
+
+    monkeypatch.setattr(api, "MANIFEST_DIR", tmp_path)
+    client = TestClient(api._create_app(production=False, cors_origins=[], api_token=""))
+    assert client.get("/recommended").json() == {"levels": {}}
+    level = tmp_path / "published" / "N1"
+    level.mkdir(parents=True)
+    for number, run in ((1, "a"), (2, "b")):
+        (level / f"v{number:04d}.json").write_text(json.dumps({"publication_version": number, "run_id": run}), encoding="utf-8")
+    payload = client.get("/recommended").json()["levels"]["N1"]
+    assert payload["current"]["run_id"] == "b" and len(payload["history"]) == 2

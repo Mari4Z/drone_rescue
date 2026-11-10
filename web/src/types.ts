@@ -50,6 +50,7 @@ export interface CatalogResponse {
 }
 
 export interface LoadResponse {
+  session_id: string;
   model: {
     run_id: string;
     sha256: string;
@@ -66,6 +67,37 @@ export interface LoadResponse {
   config: DroneConfig;
   config_sha256: string;
   mode: EpisodeMode;
+}
+
+export interface ManualSessionResponse {
+  session_id: string;
+  environment: LoadResponse["environment"];
+  config: DroneConfig;
+  mode: "manual";
+  state: EpisodeState;
+}
+
+export interface TrainingJob {
+  job_id: string;
+  status: "RUNNING" | "FINISHED" | "FAILED";
+  profile_id: string;
+  algorithm?: "ppo" | "q_learning";
+  seed: number;
+  episode: number;
+  total_episodes: number | null;
+  timesteps?: number;
+  total_timesteps?: number | null;
+  evaluation_success?: number;
+  evaluation_delivered?: number;
+  return?: number;
+  success?: boolean;
+  epsilon?: number;
+  cause?: string;
+  steps?: number;
+  run_id: string | null;
+  manifest_path?: string;
+  checkpoint_path?: string;
+  error: string | null;
 }
 
 export interface DroneConfig {
@@ -108,30 +140,13 @@ export interface EpisodeState {
 export interface EvaluationResponse {
   evaluation_id: string;
   run_id: string;
+  evaluation_run_id: string;
   result_path: string;
   result: {
     cases: Array<{
       case_id: string;
       metrics: Record<string, number | null>;
     }>;
-  };
-}
-
-export interface TrainingStatus {
-  state: "idle" | "running" | "finished" | "failed";
-  profiles: string[];
-  max_timesteps: number;
-  profile?: string;
-  seed?: number;
-  timesteps?: number;
-  elapsed_s?: number;
-  run_id?: string | null;
-  error?: string;
-  progress?: {
-    timesteps?: number;
-    "training/success"?: number;
-    "evaluation/success"?: number;
-    "evaluation/delivered"?: number;
   };
 }
 
