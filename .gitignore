@@ -37,6 +37,6 @@ drone_route*.png
 
 # Salidas locales
 .DS_Store
-models/
+/models/
 drone_view*.html
 .vercel/

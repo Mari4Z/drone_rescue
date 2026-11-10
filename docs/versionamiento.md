@@ -48,6 +48,19 @@ Un modelo solo se ejecuta en su familia. Si cambian las dimensiones o el signifi
 
 `pipelines/import_historical.py` registra modelos anteriores a este pipeline con `provenance: historico`. Conservan el intento, su hash y una nueva evaluación, pero su commit es el más cercano al entrenamiento y sus parámetros de entrenamiento no quedaron registrados. No son runs reproducibles ni evidencia para seleccionar.
 
+## Recuperar los modelos
+
+Los pesos no van en Git. `artifacts/models` está en DVC (`artifacts/models.dvc`) y cada entrega publica además el paquete en una release de GitHub:
+
+```bash
+gh release download <tag> --pattern 'drone-rescue-modelos-*.tar.gz' --pattern SHA256SUMS
+shasum -a 256 -c SHA256SUMS
+tar -xzf drone-rescue-modelos-*.tar.gz      # crea artifacts/models y artifacts/q_tables
+.venv/bin/python scripts/verify_packages.py  # compara cada archivo con el SHA-256 de su manifiesto
+```
+
+Mientras no haya remoto DVC, `dvc pull` no sirve: la release es la vía de recuperación. Los finalistas `exp-001` a `exp-004` tienen manifiesto en el repositorio, pero sus pesos no están en esta release.
+
 ## Reproducir
 
 ```bash
