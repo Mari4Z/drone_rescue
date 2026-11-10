@@ -479,6 +479,9 @@ async function loadSelectedRun(run: CatalogRun, seed = run.seed ?? 0, link?: Epi
     const mode = link?.mode ?? "manual";
     const reset = await resetEpisode(mode, seed);
     updateEpisodeView(reset);
+    element("#mode-notice").textContent = mode === "manual"
+      ? "Cada acción manual avanza exactamente un paso del ambiente."
+      : `Modelo cargado · modo ${modeLabels[mode]}. Usa Reproducir episodio para avanzar.`;
     if (link) {
       if (link.mode === "manual") {
         for (const action of link.actions) {
