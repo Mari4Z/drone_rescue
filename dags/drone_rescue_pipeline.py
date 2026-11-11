@@ -26,16 +26,17 @@ with DAG(
         "seed": Param(11, type="integer"),
         "timesteps": Param(0, type="integer", description="0 usa el presupuesto del perfil"),
         "run_id": Param("", type="string", description="Run existente; si se indica, no entrena"),
+        "parent_run_id": Param("", type="string", description="Continúa el entrenamiento desde el checkpoint de este run"),
     },
     tags=["drone-rescue", "mlops"],
 ) as dag:
     validate = BashOperator(task_id="1_validar", bash_command=f"{STEP} validate {STATE} --profile {{{{ params.profile }}}}")
-    tests = BashOperator(task_id="2_probar", bash_command=f"{STEP} tests")
+    tests = BashOperator(task_id="2_probar", bash_command=f"{STEP} tests {STATE}")
     train = BashOperator(
         task_id="3_entrenar",
         bash_command=(
             f"{STEP} train {STATE} --profile {{{{ params.profile }}}} --seed {{{{ params.seed }}}} "
-            "--timesteps {{ params.timesteps }} --run-id '{{ params.run_id }}'"
+            "--timesteps {{ params.timesteps }} --run-id '{{ params.run_id }}' --parent-run-id '{{ params.parent_run_id }}'"
         ),
     )
     evaluate = BashOperator(task_id="4_evaluar", bash_command=f"{STEP} evaluate {STATE}")
@@ -45,3 +46,16 @@ with DAG(
     verify = BashOperator(task_id="8_verificar", bash_command=f"{STEP} verify {STATE}")
 
     validate >> tests >> train >> evaluate >> register >> select >> publish >> verify
+
+
+with DAG(
+    dag_id="drone_rescue_rollback",
+    description="Sección 14 de la guía: restaura la publicación anterior como versión nueva y comprueba la servida",
+    schedule=None,
+    catchup=False,
+    params={"level": Param("N1", type="string", enum=["N1", "N2", "N3"])},
+    tags=["drone-rescue", "mlops"],
+) as rollback_dag:
+    restore = BashOperator(task_id="1_restaurar", bash_command=f"{STEP} rollback {STATE} --level {{{{ params.level }}}}")
+    check = BashOperator(task_id="2_verificar", bash_command=f"{STEP} verify {STATE} --level {{{{ params.level }}}}")
+    restore >> check

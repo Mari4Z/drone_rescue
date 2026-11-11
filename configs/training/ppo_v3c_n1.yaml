@@ -1,0 +1,22 @@
+model_family: drone-rescue-v3
+experiment:
+  id: ppo-v3c-n1
+  hypothesis: "Continuar 1M de pasos el modelo publicado de N1 (ppo-v3b-n1 semilla 11, run 9a188153) desde su checkpoint final, con el optimizador y el contador conservados, reduce los pasos medios sin perder éxito. Se entrena con parent_run_id=9a188153b37a4b62940445045e0a9914."
+  parent_run_id: 9a188153b37a4b62940445045e0a9914
+level:
+  id: N1
+  config: configs/levels/n1_mision_base.yaml
+training:
+  timesteps: 1000000
+  n_envs: 4
+  evaluation_every: 250000
+  evaluation_seeds: [101, 211, 307, 401, 503]
+  agent:  # se conservan los del run padre: al continuar se cargan desde su checkpoint
+    n_steps: 2048
+    batch_size: 1024
+    n_epochs: 5
+    gamma: 0.995
+    gae_lambda: 0.95
+    ent_coef: 0.01
+    learning_rate: 0.0003
+    net_arch: [256, 256]

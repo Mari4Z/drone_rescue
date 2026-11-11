@@ -3,14 +3,14 @@
 Se ejecutan por separado para que el orquestador registre su estado:
 
     python -m pipelines.pipeline_steps validate --state S --profile P
-    python -m pipelines.pipeline_steps tests
-    python -m pipelines.pipeline_steps train --state S --profile P --seed 11 [--timesteps N | --run-id R]
+    python -m pipelines.pipeline_steps tests --state S
+    python -m pipelines.pipeline_steps train --state S --profile P --seed 11 [--timesteps N | --run-id R | --parent-run-id R]
     python -m pipelines.pipeline_steps evaluate --state S
     python -m pipelines.pipeline_steps register --state S
     python -m pipelines.pipeline_steps select --state S
     python -m pipelines.pipeline_steps publish --state S
     python -m pipelines.pipeline_steps verify --level N1
-    python -m pipelines.pipeline_steps rollback --level N1
+    python -m pipelines.pipeline_steps rollback --level N1 [--state S]
 """
 
 from __future__ import annotations
@@ -88,22 +88,34 @@ def validate(state_path: str, profile_path: str) -> None:
     }, level=profile["level"]["id"], family=family)
 
 
-def tests() -> None:
-    """Etapa 2: reglas, observaciones, acciones y terminaciones."""
-    subprocess.run([sys.executable, "-m", "pytest", "-q", *FAST_TESTS], cwd=PROJECT_ROOT, check=True)
+def tests(state_path: str | None = None) -> None:
+    """Etapa 2: reglas, observaciones, acciones y terminaciones. Deja el resumen de pytest como evidencia."""
+    result = subprocess.run([sys.executable, "-m", "pytest", "-q", *FAST_TESTS], cwd=PROJECT_ROOT,
+                            capture_output=True, text=True)
+    print(result.stdout[-2000:], result.stderr[-2000:], sep="\n")
+    summary = next((line for line in reversed(result.stdout.splitlines()) if " in " in line and ("passed" in line or "failed" in line)), "")
+    if state_path:
+        _write_state(state_path, "tests", {
+            "passed": result.returncode == 0, "summary": summary.strip("= "), "files": FAST_TESTS,
+            "git_commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT, capture_output=True, text=True).stdout.strip(),
+        })
+    if result.returncode != 0:
+        raise RuntimeError(f"Fallaron las pruebas: {summary}")
 
 
-def train(state_path: str, profile_path: str, seed: int, timesteps: int | None, run_id: str | None) -> None:
-    """Etapa 3: entrena un candidato, o toma un run ya existente y compatible."""
+def train(state_path: str, profile_path: str, seed: int, timesteps: int | None, run_id: str | None,
+          parent_run_id: str | None = None) -> None:
+    """Etapa 3: entrena un candidato (desde cero o continuando un checkpoint), o toma un run existente."""
     if run_id:
         manifest = _manifest(run_id)
         if manifest.get("model_sha256") is None:
             raise ValueError(f"El run {run_id} no tiene checkpoint: {manifest.get('failure_detail')}")
         _write_state(state_path, "train", {"origin": "run existente", "run_id": run_id}, run_id=run_id)
         return
-    result = train_run(profile_path, seed, timesteps_override=timesteps)
-    _write_state(state_path, "train", {"origin": "entrenado", "run_id": result["run_id"], "registry_uri": result["registry_uri"]},
-                 run_id=result["run_id"])
+    result = train_run(profile_path, seed, timesteps_override=timesteps, parent_run_id=parent_run_id)
+    origin = f"continuación de {parent_run_id}" if parent_run_id else "entrenado desde cero"
+    _write_state(state_path, "train", {"origin": origin, "run_id": result["run_id"], "registry_uri": result["registry_uri"],
+                                       "parent_run_id": parent_run_id}, run_id=result["run_id"])
 
 
 def evaluate(state_path: str) -> None:
@@ -276,6 +288,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--timesteps", type=int)
     parser.add_argument("--run-id")
+    parser.add_argument("--parent-run-id", help="Continúa el entrenamiento desde el checkpoint de ese run")
     parser.add_argument("--level")
     args = parser.parse_args()
     os.chdir(PROJECT_ROOT)
@@ -283,9 +296,9 @@ def main() -> None:
     if args.stage == "validate":
         validate(args.state, args.profile)
     elif args.stage == "tests":
-        tests()
+        tests(args.state)
     elif args.stage == "train":
-        train(args.state, args.profile, args.seed, args.timesteps or None, args.run_id or None)
+        train(args.state, args.profile, args.seed, args.timesteps or None, args.run_id or None, args.parent_run_id or None)
     elif args.stage == "evaluate":
         evaluate(args.state)
     elif args.stage == "register":
@@ -298,8 +311,13 @@ def main() -> None:
         verify(args.level or _read_state(args.state).get("level"), args.state)
     elif args.stage == "rollback":
         entry = rollback(args.level)
-        print(json.dumps(entry, ensure_ascii=False))
-        verify(args.level)
+        if args.state:  # desde el DAG: la verificación es su propia tarea
+            _write_state(args.state, "rollback", {key: entry[key] for key in (
+                "publication_version", "restored_from_version", "replaced_version", "run_id", "model_sha256", "registry_uri")},
+                level=args.level)
+        else:
+            print(json.dumps(entry, ensure_ascii=False))
+            verify(args.level)
 
 
 if __name__ == "__main__":
