@@ -72,7 +72,7 @@ Los experimentos de MLflow se ven en `https://dagshub.com/Mari4Z/drone_rescue/ex
 
 ### Hugging Face
 
-El repositorio público [`Mari4Z/drone-rescue`](https://huggingface.co/Mari4Z/drone-rescue) tiene **solo el modelo oficial**: la publicación vigente de N1 en `manifests/published/`. Trae el modelo (`model.zip`, el formato nativo de Stable-Baselines3, que se carga con `PPO.load`), su contrato de entrada y salida (`normalization.json`), la configuración, la evaluación, el manifiesto, el registro de publicación, un ejemplo (`usar_modelo.py`) y la ficha con las instrucciones de uso. Cada publicación es un tag con el mismo nombre que la release de GitHub:
+El repositorio público [`Mari4Z/drone-rescue`](https://huggingface.co/Mari4Z/drone-rescue) tiene **solo el modelo oficial**, la publicación vigente de N1 en `manifests/published/`: `model.zip` (formato nativo de Stable-Baselines3, se carga con `PPO.load`) y su ficha (`README.md`) con las instrucciones de uso, la entrada, la salida y los resultados. El manifiesto, la configuración y la evaluación quedan en Git y DVC. Cada publicación es un tag con el mismo nombre que la release de GitHub:
 
 ```python
 from huggingface_hub import hf_hub_download

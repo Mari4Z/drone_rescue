@@ -1,9 +1,10 @@
 """Publica en Hugging Face el modelo oficial: la publicación vigente de un nivel en manifests/published/.
 
-Sube el modelo (model.zip de Stable-Baselines3), su contrato de entrada y salida, la configuración,
-la evaluación, el manifiesto, el registro de publicación, un ejemplo de uso y la ficha del modelo.
-Antes de subir comprueba cada archivo con el SHA-256 de su manifiesto; después descarga el modelo
-por el tag y vuelve a comprobarlo. Cada publicación crea un tag, por ejemplo modelos-20261111b.
+Sube solo el modelo (model.zip de Stable-Baselines3) y su ficha (README.md) con las instrucciones de
+uso, el contrato de entrada y salida y los resultados. El resto de la trazabilidad (manifiesto,
+configuración, evaluación por episodio) queda en Git y DVC. Antes de subir comprueba el SHA-256 con
+el manifiesto; después descarga el modelo por el tag y vuelve a comprobarlo. Cada publicación crea un
+tag, por ejemplo modelos-20261111b; con --move-tag se reemplaza un tag que ya existía.
 
 Usa la sesión de `hf auth login`; el token nunca pasa por este script.
 
@@ -26,32 +27,6 @@ GITHUB = "https://github.com/Mari4Z/drone_rescue"
 # Archivos que maneja este script en el repositorio de Hugging Face; el resto (.gitattributes) no se toca.
 MANAGED = ["*.md", "*.json", "*.zip", "*.py", "*.npy", "*.pt", "modelos/**", "publicados/**"]
 
-EXAMPLE = '''"""Carga el modelo oficial de Drone Rescue desde Hugging Face y vuela una misión de N1.
-
-Requiere el repositorio del proyecto (ambiente y adaptador de observaciones):
-    git clone {github} && cd drone_rescue
-    python -m venv .venv && .venv/bin/pip install -r requirements.txt
-    .venv/bin/python usar_modelo.py
-"""
-
-from huggingface_hub import hf_hub_download
-from stable_baselines3 import PPO
-
-from agents.ppo import make_env
-
-ruta = hf_hub_download("{repo}", "model.zip", revision="{tag}")
-modelo = PPO.load(ruta, device="cpu")
-
-# Mismo ambiente con el que se entrenó: familia {family}, nivel {level}.
-env = make_env("{config}", "{family}")
-observacion, info = env.reset(seed=101)
-terminado = truncado = False
-while not (terminado or truncado):
-    accion, _ = modelo.predict(observacion, deterministic=True)
-    observacion, recompensa, terminado, truncado, info = env.step(int(accion))
-
-print(info["cause"], "en", env.unwrapped.steps, "pasos")
-'''
 
 
 def sha256(path: Path) -> str:
@@ -77,14 +52,7 @@ def stage(staging: Path, level: str, repo: str, tag: str) -> dict:
     for name, expected in checks.items():
         if sha256(package / name) != expected:
             raise ValueError(f"SHA-256 distinto en {package / name}")
-        shutil.copyfile(package / name, staging / name)
-    shutil.copyfile(package / "config.json", staging / "config.json")
-    shutil.copyfile(ROOT / "manifests" / f"{manifest['run_id']}.json", staging / "manifest.json")
-    shutil.copyfile(publication_path, staging / "publicacion.json")
-    config = json.loads((package / "config.json").read_text(encoding="utf-8"))
-    config_path = config.get("level", {}).get("config", "configs/levels/n1_mision_base.yaml")
-    (staging / "usar_modelo.py").write_text(EXAMPLE.format(github=GITHUB, repo=repo, tag=tag, family=manifest["model_family"],
-                                                          level=level, config=config_path), encoding="utf-8")
+    shutil.copyfile(package / "model.zip", staging / "model.zip")
     evaluation = json.loads((package / "evaluacion.json").read_text(encoding="utf-8"))
     contract = json.loads((package / "normalization.json").read_text(encoding="utf-8"))
     (staging / "README.md").write_text(model_card(publication, manifest, evaluation, contract, repo, tag), encoding="utf-8")
@@ -163,9 +131,9 @@ while not (terminado or truncado):
 print(info["cause"])  # success
 ```
 
-El mismo ejemplo está en `usar_modelo.py`. Con `revision="{tag}"` se descarga siempre esta versión; sin ella, la última publicada.
+Con `revision="{tag}"` se descarga siempre esta versión; sin ella, la última publicada.
 
-**Entrada:** {contract['state_dimensions']} valores, calculados por `make_features` a partir de los {contract['observation_dimensions']} de la observación (`normalization.json`):
+**Entrada:** {contract['state_dimensions']} valores, calculados por `make_features` a partir de los {contract['observation_dimensions']} de la observación:
 
 | Índices | Origen | Escala |
 |---|---|---|
@@ -173,17 +141,9 @@ El mismo ejemplo está en `usar_modelo.py`. Con `revision="{tag}"` se descarga s
 
 **Salida:** una acción discreta de {contract['action_dimensions']}, en {contract['action_unit']}: {actions}.
 
-## Archivos
+## Trazabilidad
 
-| Archivo | Contenido |
-|---|---|
-| `model.zip` | El modelo (Stable-Baselines3) |
-| `normalization.json` | Contrato de entrada y salida |
-| `config.json` | Perfil de entrenamiento resuelto |
-| `evaluacion.json` | Resultados por episodio en la suite |
-| `manifest.json` | Commit, configuración, semilla, suite, origen y hashes |
-| `publicacion.json` | Registro de la publicación (versión, fecha y métricas con que se aceptó) |
-| `usar_modelo.py` | Ejemplo de uso |
+El manifiesto de este modelo (commit, configuración, semilla, suite, origen y hashes) está en [`manifests/{manifest['run_id']}.json`]({GITHUB}/blob/main/manifests/{manifest['run_id']}.json). La configuración, el contrato de entrada y salida y la evaluación por episodio están versionados con DVC en `artifacts/models/{manifest['run_id']}/`.
 """
 
 
@@ -193,6 +153,7 @@ def main() -> None:
     parser.add_argument("--tag", required=True)
     parser.add_argument("--level", default="N1")
     parser.add_argument("--private", action="store_true")
+    parser.add_argument("--move-tag", action="store_true", help="si el tag ya existe, lo mueve a esta publicación")
     parser.add_argument("--dry-run", action="store_true", help="arma y muestra la ficha sin subir nada")
     args = parser.parse_args()
 
@@ -211,6 +172,8 @@ def main() -> None:
         api.create_repo(args.repo, repo_type="model", private=args.private, exist_ok=True)
         commit = api.upload_folder(repo_id=args.repo, folder_path=str(staging), repo_type="model",
                                    commit_message=f"Modelo oficial {args.level} ({args.tag})", delete_patterns=MANAGED)
+        if args.move_tag and args.tag in [ref.name for ref in api.list_repo_refs(args.repo).tags]:
+            api.delete_tag(args.repo, tag=args.tag)
         api.create_tag(args.repo, tag=args.tag, revision=commit.oid, tag_message=f"Modelo oficial {args.level} {args.tag}")
         downloaded = Path(hf_hub_download(args.repo, "model.zip", revision=args.tag))
         if sha256(downloaded) != info["manifest"]["model_sha256"]:
