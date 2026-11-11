@@ -19,6 +19,8 @@
 
 ## Preparación paso a paso
 
+Atajo para DagsHub (pasos 1 a 3): conecta el repositorio de GitHub en DagsHub, crea un token y ejecuta `./scripts/setup_dagshub.sh` en tu terminal. Pide usuario y token sin mostrarlos, configura el remoto DVC, hace `dvc push` y copia los runs de MLflow.
+
 1. Crea un repositorio de equipo en DagsHub y agrega a las personas que deban
    registrar/consultar runs. Configura su URI MLflow y token únicamente en
    variables de entorno/secretos.

@@ -12,14 +12,23 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+REPRODUCTIONS = ROOT / "artifacts" / "results" / "reproduccion_exp_001_004.json"
 
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def reproductions() -> dict[str, dict]:
+    """Runs cuyos pesos originales se perdieron y se reentrenaron (ver scripts/reproduce_exp.py)."""
+    if not REPRODUCTIONS.is_file():
+        return {}
+    return {run["run_original"]: run for run in json.loads(REPRODUCTIONS.read_text(encoding="utf-8"))["runs"]}
+
+
 def main() -> int:
-    problems, checked = [], 0
+    problems, notes, checked = [], [], 0
+    replaced = reproductions()
     for manifest_path in sorted((ROOT / "manifests").glob("[0-9a-f]*.json")):
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if not manifest.get("model_sha256"):
@@ -30,7 +39,14 @@ def main() -> int:
             checks = [(ROOT / "artifacts" / "q_tables" / model_name, manifest["model_sha256"])]
             for path, expected in checks:
                 checked += 1
-                if not path.is_file():
+                substitute = replaced.get(manifest["run_id"])
+                if not path.is_file() and substitute:
+                    copy = ROOT / substitute["archivo_reproducido"]
+                    if copy.is_file() and sha256(copy) == substitute["sha256_reproducido"]:
+                        notes.append(f"{path.relative_to(ROOT)}: original perdido; reproducción verificada en {copy.relative_to(ROOT)}")
+                    else:
+                        problems.append(f"falta {path.relative_to(ROOT)} y su reproducción {substitute['archivo_reproducido']}")
+                elif not path.is_file():
                     problems.append(f"falta {path.relative_to(ROOT)} (puede ser de otro equipo: ver docs/despliegue.md)")
                 elif sha256(path) != expected:
                     problems.append(f"SHA-256 distinto en {path.relative_to(ROOT)}")
@@ -47,9 +63,11 @@ def main() -> int:
                 problems.append(f"falta {path.relative_to(ROOT)}")
             elif sha256(path) != expected:
                 problems.append(f"SHA-256 distinto en {path.relative_to(ROOT)}")
-    print(f"{checked} archivos comprobados, {len(problems)} problemas")
+    print(f"{checked} archivos comprobados, {len(problems)} problemas, {len(notes)} sustituidos por reproducción")
     for problem in problems:
         print(" -", problem)
+    for note in notes:
+        print(" ·", note)
     return 1 if problems else 0
 
 

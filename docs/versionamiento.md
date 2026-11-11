@@ -59,7 +59,9 @@ tar -xzf drone-rescue-modelos-*.tar.gz      # crea artifacts/models y artifacts/
 .venv/bin/python scripts/verify_packages.py  # compara cada archivo con el SHA-256 de su manifiesto
 ```
 
-Mientras no haya remoto DVC, `dvc pull` no sirve: la release es la vía de recuperación. Los finalistas `exp-001` a `exp-004` tienen manifiesto en el repositorio, pero sus pesos no están en esta release.
+Con el remoto de DagsHub configurado (`scripts/setup_dagshub.sh`), `dvc pull` también recupera modelos, tablas Q, resultados y el almacén de MLflow.
+
+Los pesos originales de `exp-001` a `exp-004` (5 de noviembre) se perdieron. Se reentrenaron con el mismo commit, perfil, semilla y suite (`scripts/reproduce_exp.py`) y quedaron en `artifacts/q_tables/reproducciones/`. Las métricas reproducidas coinciden con `docs/decision.md`; solo `exp-003` coincide además bit a bit, así que se restauró con su nombre original. La comparación completa está en `artifacts/results/reproduccion_exp_001_004.json`, y `verify_packages.py` acepta esas reproducciones en lugar de los originales.
 
 ## Reproducir
 
