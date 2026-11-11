@@ -77,7 +77,7 @@ git tag -a <version> -m "<qué entrega>"
 git push origin <rama> <version>
 ```
 
-Sube el paquete de modelos a la release de GitHub, haz `dvc push` y publica la misma versión en Hugging Face con el mismo tag (lo pide el profesor):
+Sube el paquete de modelos a la release de GitHub, haz `dvc push` y si cambió el modelo oficial (una publicación nueva en `manifests/published/`), publícalo en Hugging Face con el mismo tag; allí solo va el modelo oficial (lo pide el profesor):
 
 ```bash
 .venv/bin/python scripts/publish_huggingface.py --repo Mari4Z/drone-rescue --tag <version>
@@ -92,7 +92,7 @@ Comprueba en vez de suponer:
 - [ ] `git status` limpio, y el commit está en GitHub.
 - [ ] El manifiesto tiene `git_dirty: false` y su `model_sha256` coincide con el archivo.
 - [ ] `.venv/bin/python -m pytest -q` pasa.
-- [ ] El modelo se puede recuperar **fuera de esta carpeta**: `dvc pull`, la release o Hugging Face, no solo `artifacts/` local.
+- [ ] El modelo se puede recuperar **fuera de esta carpeta**: `dvc pull` o la release (y el oficial, en Hugging Face), no solo `artifacts/` local.
 - [ ] La afirmación se apoya en métricas de misión de la suite, no en una demostración ni solo en el retorno.
 - [ ] En niveles sin viento, los episodios de la suite son idénticos entre semillas: 100 % significa un episodio repetido.
 

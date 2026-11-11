@@ -68,18 +68,20 @@ dvc remote modify --local dagshub password <token>   # User Settings → Tokens
 dvc pull
 ```
 
-Los experimentos de MLflow se ven en `https://dagshub.com/Mari4Z/drone_rescue/experiments`. Sin cuenta, la vía de recuperación es la release de GitHub o Hugging Face.
+Los experimentos de MLflow se ven en `https://dagshub.com/Mari4Z/drone_rescue/experiments`. Sin cuenta, la vía de recuperación es la release de GitHub (todos los modelos) o Hugging Face (el oficial).
 
 ### Hugging Face
 
-Los modelos también se versionan en el repositorio público [`Mari4Z/drone-rescue`](https://huggingface.co/Mari4Z/drone-rescue): una carpeta por run (`modelos/<experimento>/<run_id>/`) con sus pesos y su manifiesto, el historial de publicaciones en `publicados/` y una ficha del modelo con la tabla de resultados. Cada entrega es un tag con el mismo nombre que la release de GitHub, así que una versión concreta se descarga con:
+El repositorio público [`Mari4Z/drone-rescue`](https://huggingface.co/Mari4Z/drone-rescue) tiene **solo el modelo oficial**: la publicación vigente de N1 en `manifests/published/`. Trae el modelo (`model.zip`, el formato nativo de Stable-Baselines3, que se carga con `PPO.load`), su contrato de entrada y salida (`normalization.json`), la configuración, la evaluación, el manifiesto, el registro de publicación, un ejemplo (`usar_modelo.py`) y la ficha con las instrucciones de uso. Cada publicación es un tag con el mismo nombre que la release de GitHub:
 
 ```python
-from huggingface_hub import snapshot_download
-snapshot_download("Mari4Z/drone-rescue", revision="modelos-20261111")
+from huggingface_hub import hf_hub_download
+hf_hub_download("Mari4Z/drone-rescue", "model.zip", revision="modelos-20261111b")
 ```
 
-Para publicar una versión nueva (con la sesión de `hf auth login`; el script comprueba cada SHA-256 antes de subir y después de descargar):
+Los demás runs, incluidos los fallidos, se recuperan con DVC o con la release. El tag `modelos-20261111` de Hugging Face conserva la primera subida, que tenía el catálogo completo.
+
+Para publicar el modelo oficial vigente (con la sesión de `hf auth login`; el script comprueba el SHA-256 antes de subir y después de descargar):
 
 ```bash
 .venv/bin/python scripts/publish_huggingface.py --repo Mari4Z/drone-rescue --tag <tag> --dry-run
