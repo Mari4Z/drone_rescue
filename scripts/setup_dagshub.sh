@@ -42,12 +42,14 @@ echo "3/4 Subo modelos, tablas Q, resultados, suites y MLflow a DVC"
 echo "4/4 Copio los runs de MLflow al servidor compartido"
 export MLFLOW_TRACKING_USERNAME="$DAGSHUB_USER" MLFLOW_TRACKING_PASSWORD="$DAGSHUB_TOKEN"
 export MLFLOW_DISABLE_AGENT_HINT=1
-# d0c7d6e2…: entrenamiento de prueba desde la web (11-nov) que se dejó fuera a propósito.
+# d0c7d6e2…, a21f0fd5… y d5e6d157…: entrenamientos de prueba desde la web (11-nov), fuera a propósito.
 # Si se interrumpe, vuelve a ejecutar el script: los runs ya copiados no se repiten.
 .venv/bin/python scripts/migrate_mlflow_to_remote.py \
   --source-uri "sqlite:///${PWD}/artifacts/mlflow/mlflow.db" \
   --destination-uri "${BASE}.mlflow" \
-  --skip-run d0c7d6e221cc4c2a81d8f37cd454a4d5
+  --skip-run d0c7d6e221cc4c2a81d8f37cd454a4d5 \
+  --skip-run a21f0fd55c564bff8c05e78d558621d0 \
+  --skip-run d5e6d157397242478274564bfbbe12bb
 
 echo
 echo "Listo. Experimentos: ${BASE}/experiments  ·  Datos DVC: ${BASE}"

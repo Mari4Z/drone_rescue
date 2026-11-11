@@ -104,11 +104,22 @@ def collect(staging: Path) -> list[dict]:
                 note = "reproducción (original perdido)"
             else:
                 raise FileNotFoundError(f"No hay pesos para {run_id}")
-            # Evaluación: la del MLflow local si coincide con el manifiesto; si no, la de la reproducción.
-            for evaluation in (ROOT / "artifacts" / "mlflow" / "mlruns").glob(f"*/{run_id}/artifacts/evaluation/evaluacion.json"):
-                if sha256(evaluation) == manifest.get("evaluation_sha256"):
-                    shutil.copyfile(evaluation, destination / "evaluacion.json")
+            # Configuración, normalización y evaluación (§11, puntos 2, 4 y 6): las del MLflow local si
+            # coinciden con el manifiesto; si el run original se perdió, las de su reproducción.
+            for artifacts in (ROOT / "artifacts" / "mlflow" / "mlruns").glob(f"*/{run_id}/artifacts"):
+                for name, key in (("config/config.json", "config_sha256"), ("normalization/normalization.json", "normalization_sha256"),
+                                  ("evaluation/evaluacion.json", "evaluation_sha256")):
+                    path = artifacts / name
+                    if path.is_file() and sha256(path) == manifest.get(key):
+                        shutil.copyfile(path, destination / path.name)
+                evaluation = destination / "evaluacion.json"
+                if evaluation.is_file():
                     metrics = level_metrics(json.loads(evaluation.read_text(encoding="utf-8")), manifest.get("level_id"))
+            if run_id in reproductions:
+                folder = ROOT / "artifacts" / "results" / "reproducciones" / f"{reproductions[run_id]['candidato']}-seed-{reproductions[run_id]['semilla']}"
+                for path in folder.glob("*.json"):
+                    if not (destination / path.name).exists():
+                        shutil.copyfile(path, destination / path.name)
             if metrics is None and run_id in reproductions:
                 case = reproductions[run_id]["evaluacion_reproducida"].get(manifest["level_id"])
                 if case:

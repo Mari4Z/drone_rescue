@@ -1,0 +1,15 @@
+{
+  "publication_version": 2,
+  "level": "N1",
+  "published_at": "2026-11-11T22:08:05+00:00",
+  "action": "promocion",
+  "run_id": "cef121d1526e4942b914eb07114a9450",
+  "model_family": "drone-rescue-v3",
+  "model_sha256": "bdf35f2e0324f0a02a686a35d7953151071e611f9059cde8f6a0d964e9acd5c9",
+  "registry_name": "DroneRescuePPO-drone-rescue-v3-N1",
+  "registry_version": "7",
+  "registry_uri": "models:/DroneRescuePPO-drone-rescue-v3-N1/7",
+  "git_commit": "02bfcdae82d1f6f6fc0acedd538ffe832998bcea",
+  "success_rate": 1.0,
+  "mean_steps": 199.0
+}

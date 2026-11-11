@@ -3,3 +3,13 @@
 # https://dvc.org/doc/user-guide/dvcignore
 # Entrenamiento de prueba desde la web (11-nov, Q-learning N1 semilla 0); se dejó fuera a propósito.
 artifacts/q_tables/d0c7d6e221cc4c2a81d8f37cd454a4d5.npy
+# Dos entrenamientos de prueba más desde la web (11-nov, Q-learning N1 semilla 0), también fuera.
+artifacts/q_tables/a21f0fd55c564bff8c05e78d558621d0.npy
+artifacts/q_tables/d5e6d157397242478274564bfbbe12bb.npy
+# Sus artefactos de MLflow. Sus filas siguen dentro de mlflow.db: no se borran ni se migran a DagsHub.
+artifacts/mlflow/mlruns/drone-rescue-training/d0c7d6e221cc4c2a81d8f37cd454a4d5
+artifacts/mlflow/mlruns/drone-rescue-training/a21f0fd55c564bff8c05e78d558621d0
+artifacts/mlflow/mlruns/drone-rescue-training/d5e6d157397242478274564bfbbe12bb
+artifacts/mlflow/mlruns/drone-rescue-training/models/m-51938d32c8e943acbd75bc52177518d0
+artifacts/mlflow/mlruns/drone-rescue-training/models/m-46ef7057a1e74b8ba13baf9bda37fa59
+artifacts/mlflow/mlruns/drone-rescue-training/models/m-6c3a12b1b79b4e77896f7f792c009094
