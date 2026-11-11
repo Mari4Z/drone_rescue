@@ -137,6 +137,7 @@ def migrate(
     *,
     dry_run: bool = False,
     retry_incomplete: bool = False,
+    skip_run_ids: frozenset[str] = frozenset(),
 ) -> dict[str, str]:
     source = MlflowClient(tracking_uri=source_uri)
     source_runs = []
@@ -149,7 +150,7 @@ def migrate(
                 max_results=1000,
                 page_token=token,
             )
-            source_runs.extend((experiment, run) for run in page)
+            source_runs.extend((experiment, run) for run in page if run.info.run_id not in skip_run_ids)
             token = page.token
             if not token:
                 break
@@ -225,6 +226,7 @@ def main() -> None:
         action="store_true",
         help="Conserva intentos incompletos como FAILED y crea un intento nuevo; usar solo sin otra migración activa.",
     )
+    parser.add_argument("--skip-run", action="append", default=[], help="Run local que no se migra; se puede repetir.")
     args = parser.parse_args()
     mlflow.set_tracking_uri(args.destination_uri)
     migrate(
@@ -232,6 +234,7 @@ def main() -> None:
         args.destination_uri,
         dry_run=args.dry_run,
         retry_incomplete=args.retry_incomplete,
+        skip_run_ids=frozenset(args.skip_run),
     )
 
 

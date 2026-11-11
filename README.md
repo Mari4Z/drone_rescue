@@ -152,17 +152,31 @@ de Render incluido usa el plan gratuito; por sus límites de suspensión y disco
 efímero no garantiza disponibilidad continua. Para uptime permanente se
 requiere un servicio activo de pago.
 
+## Familia de cuadrícula (grid-drone-v1)
+
+`cli.py` opera una familia aparte: cuadrícula discreta y misión de A a B, sin física ni
+batería. No es compatible con `drone-rescue-v2` y no resuelve la misión completa; el detalle
+y sus límites están en [`docs/familia_cuadricula.md`](docs/familia_cuadricula.md).
+
+```bash
+python cli.py envs
+python cli.py train --algo dqn --steps 1500000 --out models/grid_dqn.pt
+python cli.py eval --model models/grid_dqn.pt --episodes 100
+python cli.py run --model models/grid_dqn.pt --web
+```
+
 ## Arquitectura
 
 - `api/main.py`: API FastAPI/Uvicorn para catálogo, carga, evaluación y pasos.
 - `envs/`: entorno Gymnasium canónico y reglas físicas de la simulación.
-- `agents/`: agente Q-learning tabular.
+- `agents/`: agente Q-learning tabular y DQN exploratorio de `drone-rescue-v2`.
+- `envs/grid_drone_env.py`, `agents/grid/`, `viewer/`, `cli.py`: familia `grid-drone-v1`.
 - `env/` y `agent/`: adaptadores para preservar imports históricos.
 - `pipelines/train.py`: entrenamiento MLflow, evaluación greedy, checkpoint,
   Model Registry y manifiesto; `train.py` conserva la ruta CLI anterior.
 - `visualize.py`, `plot3d.py`: vistas de depuración y visualización estática.
 - `configs/`: configuración YAML efectiva del ambiente y recompensa.
-- `pipelines/`: entrenamiento y evaluación; Prefect todavía está pendiente.
+- `pipelines/`, `dags/`: entrenamiento, evaluación y etapas del pipeline, orquestadas con Airflow.
 - `tests/`: pruebas del contrato actual del entorno e imports.
 - `web/`: aplicación Vite, TypeScript y Three.js desplegable en Vercel.
 - `manifests/`: manifiestos por run con hashes, URIs y runtime.
@@ -172,6 +186,15 @@ requiere un servicio activo de pago.
 La simulación Python es la autoridad para estados y transiciones. La interfaz
 Three.js solo representa el estado comunicado por la API; la
 velocidad de animación no modificará el paso físico.
+
+## PPO y versionamiento
+
+El agente de referencia es PPO con la familia `drone-rescue-v3`: el agente ordena velocidades objetivo y un estabilizador aplica las fuerzas. Qué se versiona, dónde y cómo reproducirlo está en [`docs/versionamiento.md`](docs/versionamiento.md); la skill `.claude/skills/versionar` resume los pasos.
+
+```bash
+export MLFLOW_TRACKING_URI=sqlite:///artifacts/mlflow/mlflow.db
+.venv/bin/python -m pipelines.train_ppo --profile configs/training/ppo_v3_n1.yaml --seed 11
+```
 
 ## Pruebas
 

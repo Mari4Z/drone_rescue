@@ -81,7 +81,12 @@ h1 { margin-bottom: 7px; font-size: clamp(29px, 3vw, 39px); line-height: 1.12; l
 .telemetry-card span, .telemetry-card small { display: block; color: var(--muted); font: 9px var(--mono); letter-spacing: 0.5px; }
 .telemetry-card strong { display: block; margin: 7px 0 4px; overflow: hidden; color: #e8eee8; font: 600 16px var(--display); text-overflow: ellipsis; white-space: nowrap; }
 .telemetry-card small { font: 9px "DM Sans", sans-serif; letter-spacing: 0; }
+.meter { height: 6px; margin-bottom: 6px; overflow: hidden; border-radius: 3px; background: #26332b; }
+.meter i { display: block; width: 0; height: 100%; border-radius: 3px; background: var(--mint); transition: width 0.25s ease, background-color 0.25s ease; }
+.meter[data-level="mid"] i { background: var(--amber); }
+.meter[data-level="low"] i { background: var(--red); }
 .control-column { display: grid; gap: 13px; }
+.auto-play { width: 100%; justify-content: center; margin-bottom: 10px; }
 .panel { padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
 .mode-badge { padding: 5px 8px; border: 1px solid #47634f; border-radius: 4px; background: #22382b; color: var(--mint); font: 9px var(--mono); }
 .active-model { display: flex; align-items: center; gap: 11px; margin: 17px 0 14px; padding: 12px; border: 1px solid #314238; border-radius: 7px; background: #18251d; }

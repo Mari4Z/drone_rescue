@@ -1,0 +1,21 @@
+model_family: drone-rescue-v3
+experiment:
+  id: ppo-v3b-n3
+  hypothesis: "Respecto a ppo-v3-n3, un horizonte más largo (gamma 0.995), lotes de 2048 pasos por ambiente y una red de 256x256 hacen que el aprendizaje se repita entre semillas. Base: El viento horizontal degrada el éxito respecto a N2, porque la política debe corregir la deriva en cada episodio."
+level:
+  id: N3
+  config: configs/levels/n3_operacion_exigente.yaml
+training:
+  timesteps: 10000000
+  n_envs: 4
+  evaluation_every: 250000
+  evaluation_seeds: [101, 211, 307, 401, 503]
+  agent:
+    n_steps: 2048
+    batch_size: 1024
+    n_epochs: 5
+    gamma: 0.995
+    gae_lambda: 0.95
+    ent_coef: 0.01
+    learning_rate: 0.0003
+    net_arch: [256, 256]

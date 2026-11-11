@@ -66,6 +66,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
       headers: {
         Accept: "application/json",
+        // ngrok responde con una página HTML de aviso si no se indica esto; otros servidores lo ignoran
+        "ngrok-skip-browser-warning": "1",
         ...(apiToken ? { "X-API-Key": apiToken } : {}),
         ...(sessionId ? { "X-Drone-Session": sessionId } : {}),
         ...(init?.body ? { "Content-Type": "application/json" } : {}),
@@ -125,14 +127,12 @@ export function evaluateModel(): Promise<EvaluationResponse> {
   return request("/evaluate", { method: "POST" });
 }
 
-export function startTraining(
-  profileId: "n1" | "n2" | "n3",
-  seed: number,
-  episodes: number,
-): Promise<TrainingJob> {
+export function startTraining(profileId: string, seed: number, budget: number): Promise<TrainingJob> {
+  // Q-learning se mide en episodios; PPO, en pasos del ambiente
+  const field = profileId.startsWith("ppo_") ? "timesteps" : "episodes";
   return request("/training", {
     method: "POST",
-    body: JSON.stringify({ profile_id: profileId, seed, episodes }),
+    body: JSON.stringify({ profile_id: profileId, seed, [field]: budget }),
   });
 }
 

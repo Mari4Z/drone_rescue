@@ -19,6 +19,8 @@
 
 ## Preparación paso a paso
 
+Atajo para DagsHub (pasos 1 a 3): conecta el repositorio de GitHub en DagsHub, crea un token y ejecuta `./scripts/setup_dagshub.sh` en tu terminal. Pide usuario y token sin mostrarlos, configura el remoto DVC, hace `dvc push` y copia los runs de MLflow.
+
 1. Crea un repositorio de equipo en DagsHub y agrega a las personas que deban
    registrar/consultar runs. Configura su URI MLflow y token únicamente en
    variables de entorno/secretos.
@@ -78,6 +80,8 @@
    en el MLflow/almacenamiento compartido.
 
 ## Limitaciones del plan gratuito
+
+**Modelos PPO.** Servir PPO necesita `torch` y `stable-baselines3`, incluidos en `requirements-api.txt`. Render Free tiene 512 MB de memoria y no se ha comprobado que la API con `torch` quepa ni cuánto tarda en iniciar. Si no cabe, hay que usar un plan con más memoria o exportar la política a un formato más ligero, validando que dé las mismas acciones. Entrenar PPO desde la API lanza varios procesos de simulación, así que en Render Free conviene limitar `DRONE_RESCUE_TRAINING_MAX_TIMESTEPS` o entrenar en el equipo y migrar el run.
 
 Render Free no es una opción de disponibilidad permanente: suspende el
 servicio tras 15 minutos sin tráfico, puede tardar aproximadamente un minuto

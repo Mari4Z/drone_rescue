@@ -1,3 +1,5 @@
 # Add patterns of files dvc should ignore, which could improve
 # the performance. Learn more at
 # https://dvc.org/doc/user-guide/dvcignore
+# Entrenamiento de prueba desde la web (11-nov, Q-learning N1 semilla 0); se dejó fuera a propósito.
+artifacts/q_tables/d0c7d6e221cc4c2a81d8f37cd454a4d5.npy

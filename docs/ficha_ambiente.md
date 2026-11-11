@@ -227,3 +227,17 @@ para aislar el contrato de esa transición.
   humo ejecutaron el entrenamiento y la ruta greedy. Esa ruta terminó en
   `out_of_bounds`; el smoke valida integración, no demuestra que el agente ya
   haya aprendido a completar la misión.
+
+## Familia drone-rescue-v3
+
+Conserva física, reglas, observación y recompensa de esta ficha. Cambian las acciones: el agente elige entre 11 órdenes cada 1 s (2 pasos físicos, `dt = 0.5 s`), y un estabilizador aplica en cada paso la fuerza del eje con mayor error de velocidad.
+
+| Índice | Orden | Velocidad objetivo |
+|---:|---|---|
+| 0 a 3 | `+x`, `-x`, `+y`, `-y` rápido | 4 m/s |
+| 4 a 7 | `+x`, `-x`, `+y`, `-y` lento | 1 m/s |
+| 8 y 9 | Subir y bajar | 2 m/s |
+| 10 | Sostener posición | 0.5 m/s por metro de error respecto al punto donde empezó a sostener |
+
+La entrega se activa al sostener posición con el suministro, dentro de la zona y a 0.75 m/s o menos. La acción de soltar no existe como tal, por lo que la penalización por soltar mal no se aplica en v3. El regreso se completa igual que en v2. El estabilizador tiene la versión `STABILIZER_VERSION`.
+

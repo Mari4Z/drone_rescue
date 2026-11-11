@@ -99,10 +99,9 @@ def test_health_and_version(api_client):
     assert api_client.get("/health").json() == {"status": "ok", "model_loaded": False}
     version = api_client.get("/version")
     assert version.status_code == 200
-    assert version.json() == {
-        "api_version": api.API_VERSION,
-        "environment_version": api.ENVIRONMENT_VERSION,
-    }
+    assert version.json()["api_version"] == api.API_VERSION
+    assert version.json()["environment_version"] == api.ENVIRONMENT_VERSION
+    assert version.json()["served_model"] is None
 
 
 def test_catalog_joins_mlflow_runs_and_manifests(api_client, monkeypatch):

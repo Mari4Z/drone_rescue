@@ -1,0 +1,21 @@
+model_family: drone-rescue-v3
+experiment:
+  id: ppo-v3b-n2
+  hypothesis: "Respecto a ppo-v3-n2, un horizonte más largo (gamma 0.995), lotes de 2048 pasos por ambiente y una red de 256x256 hacen que el aprendizaje se repita entre semillas. Base: Más columnas y menos batería reducen el éxito frente a N1 con el mismo algoritmo, pero PPO con estabilizador aún encuentra una ruta y reserva energía para volver."
+level:
+  id: N2
+  config: configs/levels/n2_mas_decisiones.yaml
+training:
+  timesteps: 10000000
+  n_envs: 4
+  evaluation_every: 250000
+  evaluation_seeds: [101, 211, 307, 401, 503]
+  agent:
+    n_steps: 2048
+    batch_size: 1024
+    n_epochs: 5
+    gamma: 0.995
+    gae_lambda: 0.95
+    ent_coef: 0.01
+    learning_rate: 0.0003
+    net_arch: [256, 256]

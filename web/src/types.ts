@@ -25,6 +25,9 @@ export interface CatalogRun {
   environment_version: string | null;
   seed: number | null;
   training_episodes: number | null;
+  training_timesteps: number | null;
+  algorithm: string;
+  model_family: string;
   mean_steps: number | null;
   duration_seconds: number | null;
   model_version: string | null;
@@ -59,6 +62,7 @@ export interface LoadResponse {
     reward_version: string;
     level: string | null;
     model_family: string;
+    algorithm: string;
   };
   config: DroneConfig;
   config_sha256: string;
@@ -76,10 +80,15 @@ export interface ManualSessionResponse {
 export interface TrainingJob {
   job_id: string;
   status: "RUNNING" | "FINISHED" | "FAILED";
-  profile_id: "n1" | "n2" | "n3";
+  profile_id: string;
+  algorithm?: "ppo" | "q_learning";
   seed: number;
   episode: number;
-  total_episodes: number;
+  total_episodes: number | null;
+  timesteps?: number;
+  total_timesteps?: number | null;
+  evaluation_success?: number;
+  evaluation_delivered?: number;
   return?: number;
   success?: boolean;
   epsilon?: number;
@@ -122,6 +131,7 @@ export interface EpisodeState {
     environment_version: string;
   };
   reward: number;
+  episode_return: number;
   cause: string | null;
   terminated: boolean;
   truncated: boolean;

@@ -1,0 +1,15 @@
+.git
+.venv
+.venv-airflow
+.airflow
+.dvc/cache
+.claude
+models
+artifacts
+web
+docs
+dags
+tests
+*.html
+*.png
+**/__pycache__
