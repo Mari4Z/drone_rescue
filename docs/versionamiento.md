@@ -59,7 +59,16 @@ tar -xzf drone-rescue-modelos-*.tar.gz      # crea artifacts/models y artifacts/
 .venv/bin/python scripts/verify_packages.py  # compara cada archivo con el SHA-256 de su manifiesto
 ```
 
-Con el remoto de DagsHub configurado (`scripts/setup_dagshub.sh`), `dvc pull` también recupera modelos, tablas Q, resultados y el almacén de MLflow.
+El remoto DVC es DagsHub (`https://dagshub.com/Mari4Z/drone_rescue.dvc`), configurado por `scripts/setup_dagshub.sh`. El repositorio es público, pero DagsHub exige una cuenta (gratuita, se puede entrar con GitHub) incluso para leer. Cada persona usa su propio token, que solo queda en `.dvc/config.local`:
+
+```bash
+dvc remote modify --local dagshub auth basic
+dvc remote modify --local dagshub user <usuario-dagshub>
+dvc remote modify --local dagshub password <token>   # User Settings → Tokens
+dvc pull
+```
+
+Los experimentos de MLflow se ven en `https://dagshub.com/Mari4Z/drone_rescue/experiments`. Sin cuenta, la vía de recuperación es la release de GitHub.
 
 Los pesos originales de `exp-001` a `exp-004` (5 de noviembre) se perdieron. Se reentrenaron con el mismo commit, perfil, semilla y suite (`scripts/reproduce_exp.py`) y quedaron en `artifacts/q_tables/reproducciones/`. Las métricas reproducidas coinciden con `docs/decision.md`; solo `exp-003` coincide además bit a bit, así que se restauró con su nombre original. La comparación completa está en `artifacts/results/reproduccion_exp_001_004.json`, y `verify_packages.py` acepta esas reproducciones en lugar de los originales.
 
