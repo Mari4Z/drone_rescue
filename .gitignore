@@ -40,3 +40,4 @@ drone_route*.png
 /models/
 drone_view*.html
 .vercel/
+/data

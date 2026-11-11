@@ -21,7 +21,7 @@ Un modelo solo se ejecuta en su familia. Si cambian las dimensiones o el signifi
 | Código | Git | Commit completo en cada run y manifiesto; tag de release |
 | Ambiente | `envs/`, `docs/ficha_ambiente.md` | `ENVIRONMENT_VERSION`, `STABILIZER_VERSION`, `model_family` |
 | Recompensa | `configs/drone_rescue.yaml` | `reward.version` |
-| Escenarios y datos | `configs/levels`, `configs/experiments`, `random_columns` | YAML en Git; no hay dataset, las experiencias se generan con estos escenarios y las semillas registradas |
+| Escenarios y datos | `configs/levels`, `configs/experiments`, `random_columns`; dataset en `data/` (DVC) | YAML en Git. El dataset (`docs/dataset.md`) guarda los escenarios con el viento sorteado por semilla y los episodios de la suite, con `dataset_version` y SHA-256 por archivo |
 | Configuración | Perfil YAML y `config.json` por run | `config_sha256` |
 | Experimento | MLflow | `run_id`, hipótesis, presupuesto, semilla y estado; se conservan los intentos fallidos |
 | Modelo | Registry, `artifacts/models/<run_id>/` | `model_sha256`, contrato en `normalization.json` |

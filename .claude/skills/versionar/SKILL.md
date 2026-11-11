@@ -48,6 +48,13 @@ Haz commit de los manifiestos nuevos y actualiza los punteros de DVC:
 git add manifests artifacts/*.dvc artifacts/.gitignore
 ```
 
+Si cambió el ambiente, la recompensa, la suite o el modelo oficial, regenera el dataset y versiónalo (`docs/dataset.md`):
+
+```bash
+.venv/bin/python -m pipelines.build_dataset
+.venv/bin/dvc add data && git add data.dvc
+```
+
 Si hay remoto configurado, ejecuta `.venv/bin/dvc push`. Consulta `docs/versionamiento.md`: si no lo hay, los modelos solo se pueden recuperar desde la release de GitHub.
 
 **Conserva los intentos fallidos y rechazados.** Nunca borres un run, manifiesto o publicación porque salió mal.
