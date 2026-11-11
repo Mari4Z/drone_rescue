@@ -10,6 +10,9 @@ Ejemplos:
   python cli.py eval  --model models/dqn.pt --episodes 100
   python cli.py run   --model models/dqn.pt --seed 7 --web
   python cli.py train --algo qlearning --env DroneRescueGridDummy-v1 --episodes 6000 --out models/dummy.npy
+  python cli.py run   --env DroneRescueGridStorm-v3 --model artifacts/models/<run_id>/model.pt --seed 600000 --web
+
+Los runs formales de grid-drone-v2 se entrenan con pipelines/train_grid.py (MLflow, manifiesto y DVC).
 """
 import argparse
 import webbrowser
@@ -21,7 +24,7 @@ import numpy as np
 
 import envs.grid_drone_env  # noqa: F401  (registra los entornos)
 from agents.grid.astar import astar
-from agents.grid.evaluate import EVAL_SEED, evaluate, fmt, run_episode, score
+from agents.grid.evaluate import EVAL_SEED, evaluate, evaluate_storm, fmt, fmt_storm, run_episode, score, score_storm
 from envs.grid_drone_env import (CELL, GOAL, NX, NY, NZ, R_CRASH, R_GOAL, R_LOW, R_PROGRESS, R_STEP,
                            SENSOR_RANGE, START)
 from viewer.text_view import show
@@ -31,7 +34,9 @@ ENVS = {
     "DroneRescueGridDummy-v1": "mapa fijo de 1 columna, observación = posición (Q-learning tabular)",
     "DroneRescueGridRandom-v2": "mapa aleatorio en cada intento + sensores + altura de crucero (DQN)",
     "DroneRescueGridFixed-v2": "mapa fijo de 5 columnas con la observación de v2 (prueba del DQN)",
+    "DroneRescueGridStorm-v3": "grid-drone-v2: 12 a 35 edificios, B aleatorio, viento con ráfagas y batería (DQN)",
 }
+STORM = "DroneRescueGridStorm-v3"
 DEFAULT_ENV = {"dqn": "DroneRescueGridRandom-v2", "qlearning": "DroneRescueGridDummy-v1"}
 KEYS = {"d": 0, "a": 1, "w": 2, "s": 3, "r": 4, "f": 5}  # +x, -x, +y, -y, subir, bajar
 
@@ -49,15 +54,15 @@ def env_for(args, algo):
     return env_id
 
 
-def load_policy(model, device="auto"):
+def load_policy(model, device="auto", env_id="DroneRescueGridRandom-v2"):
     """Devuelve una función obs -> acción para un modelo .pt (DQN) o .npy (tabla Q)."""
     if algo_of(model) == "dqn":
         from agents.grid.dqn import DQNAgent
         agent = DQNAgent.load(model, device)
-        n_obs = gym.make("DroneRescueGridRandom-v2").observation_space.shape[0]
+        n_obs = gym.make(env_id).observation_space.shape[0]
         if agent.q.net[0].in_features != n_obs:
             raise SystemExit(f"{model} espera {agent.q.net[0].in_features} observaciones y el entorno da {n_obs}: "
-                             "es de una versión anterior del entorno, vuelve a entrenarlo")
+                             "es de otra versión o familia del entorno (ver docs/familia_cuadricula.md)")
         return agent, agent.act
     from agents.grid.qlearning import QAgent
     agent = QAgent((NX, NY, NZ), 6)
@@ -88,9 +93,20 @@ def cmd_rules(args):
     if e.min_cruise_z:
         print(f"    - Volar por debajo de {e.min_cruise_z * CELL} m (fuera de A y B) penaliza {R_LOW:+}/paso.")
     print(f"  Recompensas: meta {R_GOAL:+} | choque {R_CRASH:+} | paso {R_STEP:+} | acercarse a B {R_PROGRESS:+}/celda")
-    if v2:
-        print(f"  Observación (39): posición, vector hacia B, 6 sensores de distancia (hasta {SENSOR_RANGE * CELL} m)"
-              " y ocupación del cubo 3x3x3 alrededor del dron")
+    if v2 and env_id != STORM:
+        print(f"  Observación (46): posición, vector hacia B, 6 sensores de distancia (hasta {SENSOR_RANGE * CELL} m),"
+              " ocupación del cubo 3x3x3 alrededor del dron y visitas a la celda y sus vecinas")
+    if env_id == STORM:
+        import envs.grid_drone_env as g
+        print(f"""  B cambia en cada mapa (a {g.GOAL_MIN_DIST} celdas o más de A). Este mapa: B = {e.goal}
+  Viento: dirección y fuerza por intento (hasta {g.WIND_MAX}). Tras cada movimiento en el aire, una ráfaga empuja
+    una celda a favor del viento con probabilidad fuerza x (0.4 a 1.0 según la altura). Contra un edificio: choque.
+    Este mapa: fuerza {e.wind:.2f}, dirección ({e.wind_dir[0]:+.2f}, {e.wind_dir[1]:+.2f}).
+  Batería: horizontal {g.ENERGY_H}, subir {g.ENERGY_UP}, bajar {g.ENERGY_DOWN} por celda; contra el viento hasta
+    +{g.HEADWIND * g.WIND_MAX:.1f}, a favor hasta -{g.HEADWIND * g.WIND_MAX:.1f}; cada ráfaga +{g.GUST_ENERGY}.
+    Capacidad = mejor ruta x {g.BATTERY_MARGIN[0]} a {g.BATTERY_MARGIN[1]} + {g.BATTERY_RESERVE}. Este mapa: {e.capacity:.1f}.
+    Sin batería: {g.R_BATTERY:+} y termina. Recompensa por paso: -energía (en vez de {R_STEP:+}).
+  Observación (51): las 46 de v2, viento (2), probabilidad de ráfaga a esta altura, batería y margen hasta B""")
 
 
 def cmd_train(args):
@@ -101,6 +117,9 @@ def cmd_train(args):
         from agents.grid.dqn import train_dqn
 
         def eval_fn(agent):
+            if env_id == STORM:
+                m = evaluate_storm(agent, env_id, episodes=args.eval_episodes)["metrics"]
+                return "eval " + fmt_storm(m), score_storm(m)
             m = evaluate(agent, env_id, episodes=args.eval_episodes)
             return "eval " + fmt(m), score(m)
         train_dqn(env_id, steps=args.steps, device=args.device, seed=args.seed,
@@ -118,9 +137,13 @@ def cmd_train(args):
 def cmd_eval(args):
     algo = algo_of(args.model)
     env_id = env_for(args, algo)
-    _, policy = load_policy(args.model, args.device)
-    m = evaluate(policy, env_id, episodes=args.episodes, seed=args.seed)
+    _, policy = load_policy(args.model, args.device, env_id)
     print(f"{args.model} en {env_id}, {args.episodes} mapas (semillas {args.seed}..{args.seed + args.episodes - 1})")
+    if env_id == STORM:
+        m = evaluate_storm(policy, env_id, episodes=args.episodes, seed=args.seed)["metrics"]
+        print(" ", fmt_storm(m), "|", m["cause_counts"])
+        return
+    m = evaluate(policy, env_id, episodes=args.episodes, seed=args.seed)
     print(" ", fmt(m), "|", m["results"])
 
 
@@ -133,20 +156,32 @@ def mid_flight_climbs(path):
 def cmd_run(args):
     algo = algo_of(args.model)
     env_id = env_for(args, algo)
-    _, policy = load_policy(args.model, args.device)
+    _, policy = load_policy(args.model, args.device, env_id)
     e = gym.make(env_id)
     random_map = getattr(e.unwrapped, "random_map", False)
     first = args.seed if args.seed is not None else int(np.random.default_rng().integers(1_000_000))
     seeds = [first + i for i in range(args.maps if random_map else 1)]
     episodes = []
     for seed in seeds:
-        path, result = run_episode(e, policy, seed=seed)
-        best = astar(e.unwrapped)
-        episodes.append({"seed": seed, "columns": e.unwrapped.columns, "path": path,
-                         "result": result, "astar": len(best) - 1})
-        print(f"semilla {seed:7d} | {len(e.unwrapped.columns):2d} columnas | {result:7s} | "
-              f"{len(path) - 1:3d} pasos (A*: {len(best) - 1}) | altura máx. {max(p[2] for p in path) * CELL} m"
-              f" | {mid_flight_climbs(path)} cambios de altura en vuelo")
+        trace = []
+        path, result = run_episode(e, policy, seed=seed, trace=trace)
+        env = e.unwrapped
+        best = astar(env)
+        episode = {"seed": seed, "columns": env.columns, "path": path, "result": result, "astar": len(best) - 1}
+        line = (f"semilla {seed:7d} | {len(env.columns):2d} columnas | {result:7s} | "
+                f"{len(path) - 1:3d} pasos (A*: {len(best) - 1}) | altura máx. {max(p[2] for p in path) * CELL} m"
+                f" | {mid_flight_climbs(path)} cambios de altura en vuelo")
+        if env_id == STORM:
+            episode.update({
+                "start": list(env.start), "goal": list(env.goal), "cause": trace[-1].get("cause"),
+                "wind": round(env.wind, 4), "wind_dir": [round(float(v), 4) for v in env.wind_dir],
+                "capacity": round(env.capacity, 2), "battery": [round(env.capacity, 2)] + [round(max(i["battery"], 0), 2) for i in trace],
+                "pushes": [k + 1 for k, i in enumerate(trace) if i.get("pushed")],
+            })
+            line += (f" | viento {env.wind:.2f} | {env.pushes} ráfagas | batería {max(env.battery, 0) / env.capacity:4.0%}"
+                     + (" | choque por el viento" if trace[-1].get("cause") == "viento" else ""))
+        episodes.append(episode)
+        print(line)
     if len(episodes) == 1:
         show(e.unwrapped, episodes[0]["path"])
     if args.plot:

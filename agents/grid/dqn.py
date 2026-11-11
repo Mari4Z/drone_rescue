@@ -110,6 +110,12 @@ class DQNAgent:
         torch.save({"state": self.q.state_dict(), "n_obs": int(self.q.net[0].in_features),
                     "n_actions": int(self.n_actions), "hidden": int(self.hidden)}, path)
 
+    def save_full(self, path, steps):
+        """Checkpoint para continuar el entrenamiento: red, red objetivo, optimizador y contador."""
+        torch.save({"state": self.q.state_dict(), "target": self.target.state_dict(), "optimizer": self.opt.state_dict(),
+                    "steps": int(steps), "n_obs": int(self.q.net[0].in_features), "n_actions": int(self.n_actions),
+                    "hidden": int(self.hidden)}, path)
+
     @classmethod
     def load(cls, path, device="auto"):
         ck = torch.load(path, map_location="cpu", weights_only=True)
@@ -122,12 +128,14 @@ class DQNAgent:
 def train_dqn(env_id="DroneRescueGridRandom-v2", steps=300_000, device="auto", seed=0,
               batch_size=128, buffer_size=200_000, learning_starts=5_000, train_freq=2,
               target_every=2_000, actor_every=500, eps_start=1.0, eps_end=0.05, eps_fraction=0.4,
-              reward_scale=0.1, log_every=10_000, eval_fn=None, save_path=None):
+              reward_scale=0.1, log_every=10_000, eval_fn=None, save_path=None,
+              lr=5e-4, gamma=0.99, hidden=256, on_log=None):
     """Entrena con épsilon decreciente lineal. reward_scale baja ±100 a ±10 para estabilizar la red.
-    eval_fn(agent) -> (texto, puntuación): si se da, se guarda en save_path el modelo con mejor puntuación."""
+    eval_fn(agent) -> (texto, puntuación): si se da, se guarda en save_path el modelo con mejor puntuación.
+    on_log(paso, métricas) recibe cada log_every pasos las tasas de los últimos 500 intentos (para MLflow)."""
     e = gym.make(env_id)
     n_obs = e.observation_space.shape[0]
-    agent = DQNAgent(n_obs, e.action_space.n, device=device, seed=seed)
+    agent = DQNAgent(n_obs, e.action_space.n, device=device, lr=lr, gamma=gamma, hidden=hidden, seed=seed)
     buf = ReplayBuffer(n_obs, buffer_size, agent.device)
     print(f"entrenando DQN en {env_id} | dispositivo: {agent.device} | {steps} pasos")
 
@@ -153,8 +161,14 @@ def train_dqn(env_id="DroneRescueGridRandom-v2", steps=300_000, device="auto", s
         if step % log_every == 0:
             c = Counter(results)
             n = max(1, len(results))
+            loss = torch.stack(list(losses)).mean().item() if losses else 0.0
             line = (f"paso {step:7d} | eps {eps:.2f} | éxito {c['goal'] / n:5.1%} choque {c['crash'] / n:5.1%}"
-                    f" | loss {torch.stack(list(losses)).mean().item() if losses else 0:.3f} | {time.time() - t0:.0f}s")
+                    + (f" batería {c['battery'] / n:5.1%}" if c["battery"] else "")
+                    + f" | loss {loss:.3f} | {time.time() - t0:.0f}s")
+            if on_log:
+                on_log(step, {"training/success": c["goal"] / n, "training/crash": c["crash"] / n,
+                              "training/battery": c["battery"] / n, "training/timeout": c["timeout"] / n,
+                              "training/epsilon": eps, "training/loss": loss})
             if eval_fn:
                 agent.sync_actor()
                 text, score = eval_fn(agent)

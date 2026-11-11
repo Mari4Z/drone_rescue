@@ -174,11 +174,262 @@ class DroneSensorEnv(DroneEnv):
         return np.concatenate([pos, to_goal, rays, cube, memory]).astype(np.float32)
 
 
+# ---------------------------------------------------------------------------------------------
+# Familia grid-drone-v2 (DroneRescueGridStorm-v3): ciudad más densa, B distinto en cada mapa,
+# viento con ráfagas que empujan al dron y batería limitada. Cambian la dinámica, la observación
+# (51 valores) y la recompensa, así que sus modelos no son compatibles con grid-drone-v1.
+STORM_FAMILY = "grid-drone-v2"
+STORM_ENVIRONMENT_VERSION = "2.0.0"
+STORM_REWARD_VERSION = "2.0.0"
+STORM_N_OBS = 51
+STORM_COLUMNS = (12, 35)       # edificios por mapa (v2: 5 a 25)
+GOAL_MIN_DIST = 22             # B a 22 celdas o más de A, en planta (Manhattan)
+WIND_MAX = 0.3                 # probabilidad máxima de ráfaga por paso, a la altura máxima
+ENERGY_H, ENERGY_UP, ENERGY_DOWN = 1.0, 1.5, 0.6  # energía por celda: horizontal, subir, bajar
+HEADWIND = 2.0                 # energía extra por volar contra el viento, por unidad de viento
+GUST_ENERGY = 0.5              # corregir una ráfaga gasta batería
+BATTERY_MARGIN = (1.15, 1.5)   # capacidad = energía de la mejor ruta x margen + reserva
+BATTERY_RESERVE = 3.0
+R_BATTERY = -100.0             # quedarse sin batería termina el intento
+
+
+def wind_shear(z):
+    """Fracción del viento a la altura z (en celdas): nulo en el suelo, máximo arriba."""
+    return 0.0 if z <= 0 else 0.4 + 0.6 * z / (NZ - 1)
+
+
+class DroneStormEnv(DroneSensorEnv):
+    """Mapa aleatorio de 12 a 35 edificios, B aleatorio, viento y batería.
+
+    Viento: dirección y fuerza (0 a WIND_MAX) por episodio. Tras cada movimiento en el aire, con
+    probabilidad fuerza x wind_shear(z) una ráfaga empuja al dron una celda en la dirección del
+    viento (eje elegido según sus componentes). Si lo empuja contra un edificio o el borde, choca.
+    Batería: cada movimiento gasta ENERGY_H, ENERGY_UP o ENERGY_DOWN; contra el viento se gasta
+    más y a favor menos (HEADWIND), y cada ráfaga suma GUST_ENERGY. La capacidad se fija por mapa
+    a partir de la ruta de menor coste (A*), así que hay margen para corregir, no para dar vueltas.
+
+    Observación (51 valores en [-1, 1]): las 46 de DroneSensorEnv (con el vector hacia el B del
+    mapa) más viento (2: dirección x fuerza / WIND_MAX), probabilidad de ráfaga a la altura
+    actual / WIND_MAX (1), batería restante / capacidad (1) y margen = (batería - energía estimada
+    hasta B) / 30 (1).
+
+    Recompensa por paso: -energía + 1 por celda que se acerca a B - 0.5 si vuela bajo 20 m fuera
+    de A y B. Meta +100, choque -100, sin batería -100. Límite de 300 pasos.
+    """
+
+    def __init__(self, max_steps=300, n_columns=STORM_COLUMNS, min_cruise_m=20, wind_max=WIND_MAX):
+        super().__init__(max_steps=max_steps, columns=None, n_columns=n_columns, min_cruise_m=min_cruise_m)
+        self.observation_space = spaces.Box(-1.0, 1.0, shape=(STORM_N_OBS,), dtype=np.float32)
+        self.wind_max = wind_max
+        self.start, self.goal = START, GOAL
+        self.wind_dir, self.wind = np.array([1.0, 0.0]), 0.0
+        self.capacity = self.battery = 1.0
+        self.pushes = 0
+
+    # -- geometría -------------------------------------------------------------------------
+    def blocked(self, x, y, z):
+        if not (0 <= x < NX and 0 <= y < NY and 0 <= z < NZ):
+            return True
+        if z == 0 and (x, y) not in (self.start[:2], self.goal[:2]):
+            return True
+        return bool(self.obstacles[x, y, z])
+
+    def _random_goal(self):
+        while True:
+            x, y = int(self.np_random.integers(0, NX)), int(self.np_random.integers(0, NY))
+            if x + y >= GOAL_MIN_DIST:
+                return (x, y, 0)
+
+    def _random_columns(self):
+        count = int(self.np_random.integers(self.n_columns[0], self.n_columns[1] + 1))
+        cols = []
+        while len(cols) < count:
+            w, d = self.np_random.integers(2, 6, size=2)
+            x0, y0 = int(self.np_random.integers(0, NX - w + 1)), int(self.np_random.integers(0, NY - d + 1))
+            x1, y1 = x0 + int(w) - 1, y0 + int(d) - 1
+            if any(x0 - SAFE_ZONE <= p[0] <= x1 + SAFE_ZONE and y0 - SAFE_ZONE <= p[1] <= y1 + SAFE_ZONE
+                   for p in (self.start, self.goal)):
+                continue
+            cols.append((x0, x1, y0, y1, int(self.np_random.integers(3, 12)) * CELL))  # 15..55 m
+        return cols
+
+    # -- viento y energía ------------------------------------------------------------------
+    def gust_probability(self, z):
+        return self.wind * wind_shear(z)
+
+    def move_energy(self, p, action):
+        dx, dy, dz = ACTIONS[action]
+        if dz > 0:
+            return ENERGY_UP
+        if dz < 0:
+            return ENERGY_DOWN
+        along = dx * self.wind_dir[0] + dy * self.wind_dir[1]  # +1 a favor, -1 en contra
+        return ENERGY_H - HEADWIND * self.wind * wind_shear(p[2]) * along
+
+    def low_penalty(self, q):
+        return R_LOW if q[2] < self.min_cruise_z and (q[0], q[1]) not in (self.start[:2], self.goal[:2]) else 0.0
+
+    def plan_cost(self, p, action, q):
+        """Coste que usa A*: la energía del movimiento más la penalización por volar bajo."""
+        return self.move_energy(p, action) - self.low_penalty(q)
+
+    def plan_heuristic(self, q):
+        """Cota inferior admisible: lo mínimo por celda horizontal (con viento a favor) y bajar."""
+        horizontal = abs(q[0] - self.goal[0]) + abs(q[1] - self.goal[1])
+        return (ENERGY_H - HEADWIND * self.wind_max) * horizontal + ENERGY_DOWN * q[2]
+
+    def energy_estimate(self, p):
+        return ENERGY_H * (abs(p[0] - self.goal[0]) + abs(p[1] - self.goal[1])) + ENERGY_DOWN * p[2]
+
+    def route_energy(self, path):
+        return sum(self.move_energy(p, ACTIONS.index(tuple(b - a for a, b in zip(p, q)))) for p, q in zip(path, path[1:]))
+
+    def dist(self, p):
+        return sum(abs(a - b) for a, b in zip(p, self.goal))
+
+    def plan_route(self, start=None, risk_weight=0.0):
+        """Ruta de menor coste (Dijkstra en C, scipy) desde start hasta B, o None.
+
+        Coste de cada movimiento: plan_cost. Con risk_weight > 0 suma además
+        risk_weight x probabilidad de que una ráfaga empuje desde la celda de llegada hacia un
+        edificio o el borde: es la referencia que evita pasar pegada a los edificios a sotavento.
+        """
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.csgraph import dijkstra
+
+        start = tuple(start) if start is not None else self.start
+        free = ~self.obstacles
+        free[:, :, 0] = False
+        for pad in (self.start, self.goal):
+            free[pad[0], pad[1], 0] = not self.obstacles[pad[0], pad[1], 0]
+        index = np.arange(NX * NY * NZ).reshape(NX, NY, NZ)
+        z = np.broadcast_to(np.arange(NZ), (NX, NY, NZ))
+        shear = np.where(z > 0, 0.4 + 0.6 * z / (NZ - 1), 0.0)
+        low = (z < self.min_cruise_z)
+        low[self.start[0], self.start[1], :] = False
+        low[self.goal[0], self.goal[1], :] = False
+        risk = np.zeros((NX, NY, NZ))
+        if risk_weight:
+            wx, wy = self.wind_dir
+            share_x = abs(wx) / (abs(wx) + abs(wy))
+            padded = np.pad(free, 1, constant_values=False)
+            sx, sy = (1 if wx >= 0 else -1), (1 if wy >= 0 else -1)
+            downwind_x = ~padded[1 + sx:NX + 1 + sx, 1:NY + 1, 1:NZ + 1]
+            downwind_y = ~padded[1:NX + 1, 1 + sy:NY + 1 + sy, 1:NZ + 1]
+            risk = risk_weight * self.wind * shear * (share_x * downwind_x + (1 - share_x) * downwind_y)
+        rows, cols, weights = [], [], []
+        for (dx, dy, dz) in ACTIONS:
+            src = free[max(0, -dx):NX - max(0, dx), max(0, -dy):NY - max(0, dy), max(0, -dz):NZ - max(0, dz)]
+            dst_slice = (slice(max(0, dx), NX + min(0, dx)), slice(max(0, dy), NY + min(0, dy)), slice(max(0, dz), NZ + min(0, dz)))
+            src_slice = (slice(max(0, -dx), NX - max(0, dx)), slice(max(0, -dy), NY - max(0, dy)), slice(max(0, -dz), NZ - max(0, dz)))
+            ok = src & free[dst_slice]
+            if dz > 0:
+                energy = np.full(ok.shape, ENERGY_UP)
+            elif dz < 0:
+                energy = np.full(ok.shape, ENERGY_DOWN)
+            else:
+                along = dx * self.wind_dir[0] + dy * self.wind_dir[1]
+                energy = ENERGY_H - HEADWIND * self.wind * shear[src_slice] * along
+            cost = energy - np.where(low[dst_slice], R_LOW, 0.0) + risk[dst_slice]
+            rows.append(index[src_slice][ok])
+            cols.append(index[dst_slice][ok])
+            weights.append(cost[ok])
+        graph = coo_matrix((np.concatenate(weights), (np.concatenate(rows), np.concatenate(cols))),
+                           shape=(NX * NY * NZ,) * 2).tocsr()
+        source, target = int(index[start]), int(index[self.goal])
+        _, predecessors = dijkstra(graph, indices=source, return_predecessors=True)
+        if source != target and predecessors[target] < 0:
+            return None
+        path, node = [], target
+        while node >= 0:
+            path.append(tuple(int(v) for v in np.unravel_index(node, (NX, NY, NZ))))
+            node = predecessors[node] if node != source else -9999
+        return path[::-1]
+
+    # -- ciclo de Gymnasium ----------------------------------------------------------------
+    def reset(self, *, seed=None, options=None):
+        gym.Env.reset(self, seed=seed)
+        while True:
+            self.start, self.goal = START, self._random_goal()
+            self.columns = self._random_columns()
+            self.obstacles = build_obstacles(self.columns)
+            angle = float(self.np_random.uniform(0, 2 * np.pi))
+            self.wind_dir = np.array([np.cos(angle), np.sin(angle)])
+            self.wind = float(self.np_random.uniform(0, self.wind_max))
+            self.pos, self.steps, self.pushes = START, 0, 0
+            route = self.plan_route()
+            if route is not None:
+                break
+        self.best_route = route
+        self.capacity = self.route_energy(route) * float(self.np_random.uniform(*BATTERY_MARGIN)) + BATTERY_RESERVE
+        self.battery = self.capacity
+        self.visits = Counter({self.pos: 1})
+        return self._obs(), {"battery": self.battery, "capacity": self.capacity}
+
+    def step(self, action):
+        self.steps += 1
+        p = self.pos
+        dx, dy, dz = ACTIONS[action]
+        q = (p[0] + dx, p[1] + dy, p[2] + dz)
+        energy = self.move_energy(p, action)
+        info = {"pushed": None}
+        if self.blocked(*q):
+            self.battery -= energy
+            return self._obs(), R_CRASH, True, False, {**info, "result": "crash", "battery": self.battery, "energy": energy}
+        if q[2] >= 1 and self.np_random.random() < self.gust_probability(q[2]):
+            wx, wy = self.wind_dir
+            along_x = self.np_random.random() < abs(wx) / (abs(wx) + abs(wy))
+            push = (int(np.sign(wx)) or 1, 0, 0) if along_x else (0, int(np.sign(wy)) or 1, 0)
+            energy += GUST_ENERGY
+            self.pushes += 1
+            info["pushed"] = list(push)
+            pushed = (q[0] + push[0], q[1] + push[1], q[2])
+            if self.blocked(*pushed):
+                self.battery -= energy
+                self.pos = q
+                return self._obs(), R_CRASH, True, False, {**info, "result": "crash", "cause": "viento",
+                                                             "battery": self.battery, "energy": energy}
+            q = pushed
+        self.battery -= energy
+        reward = -energy + R_PROGRESS * (self.dist(p) - self.dist(q)) + self.low_penalty(q)
+        self.pos = q
+        self.visits[q] += 1
+        info.update(battery=self.battery, energy=energy)
+        if q == self.goal:
+            return self._obs(), R_GOAL, True, False, {**info, "result": "goal"}
+        if self.battery <= 0:
+            return self._obs(), R_BATTERY, True, False, {**info, "result": "battery"}
+        if self.steps >= self.max_steps:
+            return self._obs(), reward, False, True, {**info, "result": "timeout"}
+        return self._obs(), reward, False, False, {**info, "result": "flying"}
+
+    def _obs(self):
+        x, y, z = self.pos
+        size = np.array([NX - 1, NY - 1, NZ - 1], dtype=np.float32)
+        pos = np.array(self.pos, dtype=np.float32) / size
+        to_goal = (np.array(self.goal, dtype=np.float32) - self.pos) / size
+        rays = []
+        for dx, dy, dz in ACTIONS:
+            d = 1
+            while d <= SENSOR_RANGE and not self.blocked(x + dx * d, y + dy * d, z + dz * d):
+                d += 1
+            rays.append((d - 1) / SENSOR_RANGE)
+        cube = [float(self.blocked(x + i, y + j, z + k)) for i in (-1, 0, 1) for j in (-1, 0, 1) for k in (-1, 0, 1)]
+        memory = [min(self.visits[self.pos], 3) / 3] + [
+            min(self.visits[(x + dx, y + dy, z + dz)], 3) / 3 for dx, dy, dz in ACTIONS]
+        wind = list(self.wind_dir * self.wind / self.wind_max)
+        weather = [self.gust_probability(z) / self.wind_max,
+                   min(max(self.battery / self.capacity, 0.0), 1.0),
+                   float(np.clip((self.battery - self.energy_estimate(self.pos)) / 30.0, -1.0, 1.0))]
+        return np.clip(np.concatenate([pos, to_goal, rays, cube, memory, wind, weather]), -1.0, 1.0).astype(np.float32)
+
+
 _GRID_ENVS = {
     "DroneRescueGrid-v0": ("DroneEnv", {}),
     "DroneRescueGridDummy-v1": ("DroneEnv", {"columns": DUMMY_COLUMNS}),
     "DroneRescueGridRandom-v2": ("DroneSensorEnv", {}),
     "DroneRescueGridFixed-v2": ("DroneSensorEnv", {"columns": COLUMNS}),
+    "DroneRescueGridStorm-v3": ("DroneStormEnv", {}),
 }
 for _id, (_cls, _kwargs) in _GRID_ENVS.items():
     if _id not in gym.registry:

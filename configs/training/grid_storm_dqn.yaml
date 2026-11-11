@@ -1,0 +1,35 @@
+model_family: grid-drone-v2
+experiment:
+  id: grid-storm-dqn
+  baseline: grid-dqn-memoria
+  changed_dimension: ambiente (viento, batería, ciudad más densa, B aleatorio)
+  hypothesis: >-
+    El mismo DQN con memoria que resolvió el 99 % de los mapas de grid-drone-v1, observando
+    además el viento y la batería, mantiene al menos un 70 % de éxito en una ciudad de 12 a 35
+    edificios con B aleatorio, ráfagas que empujan y batería ajustada al mapa, frente al 88 % de
+    la referencia A* que conoce el mapa completo y evita los edificios a sotavento. El DQN
+    anterior, sin observar viento ni batería, debería caer claramente por debajo.
+environment:
+  id: DroneRescueGridStorm-v3
+evaluation_suite: configs/grid_storm_evaluation_suite.yaml
+training:
+  steps: 2500000
+  eval_every: 100000
+  device: cpu
+  torch_threads: 2
+  validation:        # mapas para elegir el mejor checkpoint; distintos de la suite
+    first_seed: 900000
+    episodes: 100
+  agent:             # los mismos hiperparámetros que grid-dqn-memoria
+    lr: 0.0005
+    gamma: 0.99
+    hidden: 256
+    batch_size: 128
+    buffer_size: 200000
+    learning_starts: 5000
+    train_freq: 2
+    target_every: 2000
+    actor_every: 500
+    eps_end: 0.05
+    eps_fraction: 0.4
+    reward_scale: 0.1

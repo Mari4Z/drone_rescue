@@ -1,0 +1,12 @@
+# Suite de la familia grid-drone-v2 (DroneRescueGridStorm-v3). No es comparable con las de
+# grid-drone-v1 ni con las de drone-rescue-v2/v3: otra dinámica, otra observación y otra misión.
+evaluation_suite_id: grid-storm-public
+version: 1.0.0
+split: public_validation
+environment: DroneRescueGridStorm-v3
+first_seed: 600000   # mapas 600000 a 600499; la validación usa 900000+ y el entrenamiento, el generador sin semilla fija
+episodes: 500
+references:
+  - astar          # A* con el mapa completo, replanea en cada paso, sin modelar las ráfagas
+  - astar_viento   # A* que además evita las celdas con un edificio a sotavento (risk_weight 30)
+  - dqn_memoria_v1 # el DQN de grid-drone-v1 (46 entradas), sin ver viento ni batería

@@ -76,7 +76,76 @@ def test_viewer_embeds_real_map_and_route(tmp_path):
     assert "/*DATA*/null" not in html and '"seed": 3' in html
 
 
-@pytest.mark.parametrize("args", [["envs"], ["rules", "--env", "DroneRescueGridRandom-v2"]])
+def _storm(seed):
+    env = gym.make("DroneRescueGridStorm-v3").unwrapped
+    env.reset(seed=seed)
+    return env
+
+
+def test_storm_observation_and_reproducibility():
+    a, b = gym.make("DroneRescueGridStorm-v3").unwrapped, gym.make("DroneRescueGridStorm-v3").unwrapped
+    oa, _ = a.reset(seed=11)
+    ob, _ = b.reset(seed=11)
+    assert oa.shape == (grid.STORM_N_OBS,) and np.array_equal(oa, ob)
+    assert a.columns == b.columns and a.goal == b.goal and a.wind == b.wind and a.capacity == b.capacity
+    assert grid.STORM_COLUMNS[0] <= len(a.columns) <= grid.STORM_COLUMNS[1]
+    assert a.goal[0] + a.goal[1] >= grid.GOAL_MIN_DIST and not a.blocked(*a.goal)
+    for action in (4, 4, 4, 4, 0, 2, 0):
+        ra, rb = a.step(action), b.step(action)
+        assert np.array_equal(ra[0], rb[0]) and ra[1:4] == rb[1:4] and a.pos == b.pos
+
+
+def test_storm_gust_can_crash_into_a_building():
+    env = _storm(3)
+    env.wind, env.wind_dir = 1.0, np.array([1.0, 0.0])  # a la altura máxima la ráfaga hacia +x es segura
+    env.obstacles[:] = False
+    env.obstacles[6, 0, :] = True                          # edificio justo a sotavento
+    env.pos = (4, 0, grid.NZ - 1)
+    _, reward, terminated, _, info = env.step(0)           # avanza a (5, 0, 11) y la ráfaga lo empuja a (6, 0, 11)
+    assert terminated and reward == grid.R_CRASH and info["result"] == "crash" and info["cause"] == "viento"
+
+
+def test_storm_battery_runs_out_and_headwind_costs_more():
+    env = _storm(5)
+    env.wind, env.wind_dir = 0.3, np.array([1.0, 0.0])
+    assert env.move_energy((5, 5, 11), 1) > env.move_energy((5, 5, 1), 1) > grid.ENERGY_H > env.move_energy((5, 5, 11), 0)
+    env.wind = 0.0  # sin ráfagas: el resultado depende solo de la batería
+    env.pos, env.battery = (0, 0, 0), 1.0
+    _, reward, terminated, _, info = env.step(4)
+    assert terminated and info["result"] == "battery" and reward == grid.R_BATTERY
+
+
+def test_storm_planner_matches_python_astar_and_battery_fits_best_route():
+    from types import SimpleNamespace
+
+    for seed in range(8):
+        env = _storm(seed)
+        route = astar(env)  # usa el Dijkstra vectorizado del ambiente
+        assert route[0] == env.start and route[-1] == env.goal and not any(env.blocked(*c) for c in route)
+        proxy = SimpleNamespace(blocked=env.blocked, plan_cost=env.plan_cost, plan_heuristic=env.plan_heuristic,
+                                start=env.start, goal=env.goal, min_cruise_z=env.min_cruise_z)
+        reference = astar(proxy)  # el A* en Python, con el mismo coste
+        cost = lambda path: sum(env.plan_cost(p, grid.ACTIONS.index(tuple(b - a for a, b in zip(p, q))), q) for p, q in zip(path, path[1:]))
+        assert cost(route) == pytest.approx(cost(reference))
+        lo, hi = grid.BATTERY_MARGIN
+        energy = env.route_energy(env.best_route)
+        assert energy * lo + grid.BATTERY_RESERVE <= env.capacity + 1e-9 <= energy * hi + grid.BATTERY_RESERVE + 1e-9
+
+
+def test_storm_replanner_and_cli_reject_v1_model(tmp_path):
+    from agents.grid.astar import AStarReplanner
+    from agents.grid.evaluate import evaluate_storm
+
+    result = evaluate_storm(None, episodes=3, seed=600000, make_policy=lambda e: AStarReplanner(e, risk_weight=30))
+    assert result["metrics"]["episodes"] == 3 and len(result["episodes"]) == 3
+    old = DQNAgent(46, 6, device="cpu")
+    old.save(tmp_path / "v1.pt")
+    run = subprocess.run([sys.executable, "cli.py", "eval", "--model", str(tmp_path / "v1.pt"), "--env", "DroneRescueGridStorm-v3",
+                          "--episodes", "1"], capture_output=True, text=True)
+    assert run.returncode != 0 and "espera 46 observaciones" in run.stderr
+
+
+@pytest.mark.parametrize("args", [["envs"], ["rules", "--env", "DroneRescueGridRandom-v2"], ["rules", "--env", "DroneRescueGridStorm-v3"]])
 def test_cli_commands_run(args):
     result = subprocess.run([sys.executable, "cli.py", *args], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr

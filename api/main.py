@@ -643,6 +643,8 @@ def _create_app(
                             "model_available": bool(
                                 manifest.get("model_uri") and manifest.get("model_sha256")
                                 and manifest.get("provenance") != "historico"
+                                # La familia de cuadrícula se sirve con cli.py, no con esta API
+                                and (manifest.get("model_family") or "drone-rescue-v2") in PPO_FAMILIES
                             ),
                             "changed_dimension": artifact_details["changed_dimension"],
                             "changes_vs_baseline": artifact_details["changes_vs_baseline"],
