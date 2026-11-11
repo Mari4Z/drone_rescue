@@ -77,7 +77,13 @@ git tag -a <version> -m "<qué entrega>"
 git push origin <rama> <version>
 ```
 
-Sube el paquete de modelos a la release de GitHub. Comprueba desde la URL publicada: catálogo, carga de un modelo antiguo y del recomendado, y una evaluación completa. `GET /version` debe mostrar el commit y el modelo que se sirven.
+Sube el paquete de modelos a la release de GitHub, haz `dvc push` y publica la misma versión en Hugging Face con el mismo tag (lo pide el profesor):
+
+```bash
+.venv/bin/python scripts/publish_huggingface.py --repo Mari4Z/drone-rescue --tag <version>
+```
+
+Comprueba desde la URL publicada: catálogo, carga de un modelo antiguo y del recomendado, y una evaluación completa. `GET /version` debe mostrar el commit y el modelo que se sirven.
 
 ## 6. Antes de decir que algo quedó versionado
 
@@ -86,7 +92,7 @@ Comprueba en vez de suponer:
 - [ ] `git status` limpio, y el commit está en GitHub.
 - [ ] El manifiesto tiene `git_dirty: false` y su `model_sha256` coincide con el archivo.
 - [ ] `.venv/bin/python -m pytest -q` pasa.
-- [ ] El modelo se puede recuperar **fuera de esta carpeta**: un `dvc pull` o la release, no solo `artifacts/` local.
+- [ ] El modelo se puede recuperar **fuera de esta carpeta**: `dvc pull`, la release o Hugging Face, no solo `artifacts/` local.
 - [ ] La afirmación se apoya en métricas de misión de la suite, no en una demostración ni solo en el retorno.
 - [ ] En niveles sin viento, los episodios de la suite son idénticos entre semillas: 100 % significa un episodio repetido.
 

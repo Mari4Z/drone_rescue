@@ -68,7 +68,23 @@ dvc remote modify --local dagshub password <token>   # User Settings → Tokens
 dvc pull
 ```
 
-Los experimentos de MLflow se ven en `https://dagshub.com/Mari4Z/drone_rescue/experiments`. Sin cuenta, la vía de recuperación es la release de GitHub.
+Los experimentos de MLflow se ven en `https://dagshub.com/Mari4Z/drone_rescue/experiments`. Sin cuenta, la vía de recuperación es la release de GitHub o Hugging Face.
+
+### Hugging Face
+
+Los modelos también se versionan en el repositorio público [`Mari4Z/drone-rescue`](https://huggingface.co/Mari4Z/drone-rescue): una carpeta por run (`modelos/<experimento>/<run_id>/`) con sus pesos y su manifiesto, el historial de publicaciones en `publicados/` y una ficha del modelo con la tabla de resultados. Cada entrega es un tag con el mismo nombre que la release de GitHub, así que una versión concreta se descarga con:
+
+```python
+from huggingface_hub import snapshot_download
+snapshot_download("Mari4Z/drone-rescue", revision="modelos-20261111")
+```
+
+Para publicar una versión nueva (con la sesión de `hf auth login`; el script comprueba cada SHA-256 antes de subir y después de descargar):
+
+```bash
+.venv/bin/python scripts/publish_huggingface.py --repo Mari4Z/drone-rescue --tag <tag> --dry-run
+.venv/bin/python scripts/publish_huggingface.py --repo Mari4Z/drone-rescue --tag <tag>
+```
 
 Los pesos originales de `exp-001` a `exp-004` (5 de noviembre) se perdieron. Se reentrenaron con el mismo commit, perfil, semilla y suite (`scripts/reproduce_exp.py`) y quedaron en `artifacts/q_tables/reproducciones/`. Las métricas reproducidas coinciden con `docs/decision.md`; solo `exp-003` coincide además bit a bit, así que se restauró con su nombre original. La comparación completa está en `artifacts/results/reproduccion_exp_001_004.json`, y `verify_packages.py` acepta esas reproducciones en lugar de los originales.
 
