@@ -236,14 +236,15 @@ def verify(level: str, state_path: str | None = None) -> dict:
     loaded = client.post("/load", json={"run_id": entry["run_id"], "seed": 0})
     if loaded.status_code != 200:
         raise RuntimeError(f"La API no pudo cargar {entry['run_id']}: {loaded.text}")
-    served = client.get("/version").json()["served_model"]
-    if served["model_sha256"] != entry["model_sha256"]:
+    headers = {"X-Drone-Session": loaded.json()["session_id"]}
+    served = client.get("/version", headers=headers).json()["served_model"]
+    if not served or served["model_sha256"] != entry["model_sha256"]:
         raise RuntimeError("El modelo servido no es el publicado")
-    client.post("/episode/reset", json={"mode": "evaluacion", "seed": 101})
+    client.post("/episode/reset", json={"mode": "evaluacion", "seed": 101}, headers=headers)
     state = {"terminated": False, "truncated": False}
     while not (state["terminated"] or state["truncated"]):
-        state = client.get("/episode/step").json()
-    runtime.active = None
+        state = client.get("/episode/step", headers=headers).json()
+    runtime.close_session(headers["X-Drone-Session"])
     evidence = {"level": level, "verified": True, "publication_version": entry["publication_version"], "run_id": entry["run_id"],
                 "served_sha256": served["model_sha256"], "smoke_episode_cause": state["cause"], "smoke_steps": state["telemetry"]["steps"]}
     if state_path:
