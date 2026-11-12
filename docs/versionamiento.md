@@ -9,6 +9,7 @@ Un modelo solo se ejecuta en su familia. Si cambian las dimensiones o el signifi
 | Familia | Dinámica y misión | Acciones | Algoritmos | Se sirve por la API |
 |---|---|---|---|---|
 | `grid-drone-v1` | Cuadrícula; ir de A a B | 6 movimientos | Q-learning tabular, DQN | No; se usa `cli.py` |
+| `grid-drone-v2` | Cuadrícula densa con B aleatoria, viento con ráfagas y batería | 6 movimientos | DQN (`pipelines/train_grid.py`) | No; se usa `cli.py` |
 | `drone-rescue-v2` | Física continua; recoger, entregar y volver | 6 fuerzas y soltar | Q-learning tabular, PPO | Sí |
 | `drone-rescue-v3` | Misma física, reglas y recompensa que v2 | 10 velocidades objetivo y sostener | PPO | Sí |
 

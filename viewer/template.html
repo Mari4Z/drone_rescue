@@ -22,6 +22,14 @@
   .muted { opacity: .7; font-size: 12px; }
   .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; background: #0f172a; border: 1px solid #334155; font-size: 12px; }
   .a { color: #4ade80; } .b { color: #f87171; }
+  #battery { display: none; margin-top: 8px; }
+  #battery .track { height: 10px; border-radius: 6px; background: #1e293b; border: 1px solid #334155; overflow: hidden; }
+  #battery .fill { height: 100%; width: 100%; background: linear-gradient(90deg, #4ade80, #a3e635); transition: width .15s linear, background .3s; }
+  #battery .fill.low { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+  #battery .fill.critical { background: linear-gradient(90deg, #ef4444, #f87171); }
+  #wind { display: none; margin-top: 6px; }
+  #gust { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 10px 18px; border-radius: 999px;
+          background: rgba(239, 68, 68, .85); color: #fff; font-weight: 700; font-size: 18px; z-index: 5; pointer-events: none; }
   #error { display: none; position: absolute; inset: 0; margin: auto; width: min(560px, 90vw); height: fit-content; background: #3f1d1d; border: 1px solid #f87171; border-radius: 8px; padding: 16px 20px; line-height: 1.5; z-index: 9; }
   #error code { background: #0f1720; padding: 2px 6px; border-radius: 4px; }
 </style>
@@ -64,7 +72,10 @@
   <div class="big" id="alt">0 m</div>
   <div id="phase"></div>
   <div class="muted" id="stepinfo"></div>
+  <div id="battery"><div class="muted">batería <span id="batt-pct"></span></div><div class="track"><div class="fill" id="batt-fill"></div></div></div>
+  <div id="wind" class="muted"></div>
 </div>
+<div id="gust">💨 ráfaga</div>
 <div id="bar" class="panel">
   <button id="prev" title="mapa anterior (←)">◀ mapa</button>
   <button id="next" title="mapa siguiente (→)">mapa ▶</button>
@@ -97,7 +108,8 @@ if (!document.createElement("canvas").getContext("webgl2")) {
   showError("Este navegador no tiene WebGL activado; three.js lo necesita.");
   throw new Error("sin WebGL");
 }
-const { cell, size, start, goal, env } = DATA;
+const { cell, size, env } = DATA;
+let { start, goal } = DATA;
 // Formato antiguo (un solo intento) o nuevo (lista de mapas)
 const episodes = DATA.episodes || [{ columns: DATA.columns, path: DATA.path, result: DATA.result }];
 const [NX, NY, NZ] = size;
@@ -108,6 +120,7 @@ document.getElementById("engine").textContent = `three.js r${THREE.REVISION} · 
 // Coordenadas: x del entorno -> x, y del entorno -> -z, altura -> y (y arriba en three.js)
 const toWorld = ([x, y, z]) => new THREE.Vector3((x + .5) * cell, (z + .5) * cell, -(y + .5) * cell);
 const isPad = (p) => (p[0] === start[0] && p[1] === start[1]) || (p[0] === goal[0] && p[1] === goal[1]);
+const STORM = episodes.some((e) => e.battery);  // grid-drone-v2: viento, batería y B por mapa
 
 // ---------- Render, cámara, postproceso ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -227,6 +240,7 @@ scene.add(bounds);
 
 // ---------- Helipuertos A y B ----------
 const pads = [];
+const padGroups = {};
 function helipad(p, color, label) {
   const hex = "#" + color.toString(16).padStart(6, "0");
   const g = new THREE.Group();
@@ -271,9 +285,57 @@ function helipad(p, color, label) {
   g.position.set(w.x, 0, w.z);
   scene.add(g);
   pads.push({ lights, color: new THREE.Color(color) });
+  padGroups[label] = g;
 }
 helipad(start, 0x4ade80, "A");
 helipad(goal, 0xf87171, "B");
+function movePad(label, p) {
+  const w = toWorld(p);
+  padGroups[label].position.set(w.x, 0, w.z);
+}
+
+// ---------- Viento: manga y flechas que recorren el cielo (solo grid-drone-v2) ----------
+const windGroup = new THREE.Group();
+scene.add(windGroup);
+const windArrows = [];
+if (STORM) {
+  const mat = new THREE.MeshBasicMaterial({ color: 0xe0f2fe, transparent: true, opacity: .55, depthWrite: false });
+  for (let k = 0; k < 28; k++) {
+    const a = new THREE.Group();
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(.12, .12, 5, 6), mat);
+    shaft.rotation.z = Math.PI / 2;
+    const head = new THREE.Mesh(new THREE.ConeGeometry(.5, 1.4, 8), mat);
+    head.rotation.z = -Math.PI / 2; head.position.x = 3.1;
+    a.add(shaft, head);
+    a.userData.phase = Math.random();
+    a.userData.lane = [Math.random(), Math.random()];
+    windGroup.add(a);
+    windArrows.push(a);
+  }
+  // Manga de viento junto a A
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(.12, .15, 14, 8), new THREE.MeshStandardMaterial({ color: 0xcbd5e1 }));
+  pole.position.set(toWorld(start).x - 7, 7, toWorld(start).z + 7);
+  const sock = new THREE.Mesh(new THREE.ConeGeometry(.9, 5, 10, 1, true),
+    new THREE.MeshStandardMaterial({ color: 0xf97316, side: THREE.DoubleSide, emissive: 0xf97316, emissiveIntensity: .25 }));
+  sock.position.copy(pole.position).setY(13.5);
+  windGroup.add(pole, sock);
+  windGroup.userData.sock = sock;
+}
+function setWind(E) {
+  if (!STORM) return;
+  const [wx, wy] = E.wind_dir || [1, 0];
+  // y del entorno -> -z en three.js
+  const dir = new THREE.Vector3(wx, 0, -wy).normalize();
+  windGroup.userData.dir = dir;
+  windGroup.userData.strength = E.wind || 0;
+  const sock = windGroup.userData.sock;
+  // La manga apunta a sotavento y se levanta con la fuerza
+  const yaw = Math.atan2(-dir.z, dir.x);
+  sock.rotation.set(0, yaw, -(Math.PI / 2) * (0.25 + 0.75 * Math.min(1, (E.wind || 0) / 0.3)));
+  sock.rotation.order = "YZX";
+  const pct = Math.round((E.wind || 0) / 0.3 * 100);
+  document.getElementById("wind").textContent = `viento ${pct}% · ráfagas ${E.pushes ? E.pushes.length : 0}`;
+}
 
 // ---------- Edificios (columnas) ----------
 const LOW = new THREE.Color(0xe2e8f0), HIGH = new THREE.Color(0x64748b);
@@ -411,6 +473,11 @@ function loadEpisode(i) {
   buildingMats = [];
   const E = episodes[ep];
   ({ path, result } = E);
+  if (E.start) { start = E.start; movePad("A", start); }
+  if (E.goal) { goal = E.goal; movePad("B", goal); }
+  setWind(E);
+  document.getElementById("battery").style.display = E.battery ? "block" : "none";
+  document.getElementById("wind").style.display = E.battery ? "block" : "none";
   for (const c of E.columns) building(...c, mapGroup);
 
   pts = path.map(toWorld);
@@ -428,7 +495,9 @@ function loadEpisode(i) {
   scene.add(mapGroup);
 
   const climbs = path.slice(1).filter((p, k) => p[2] !== path[k][2] && !isPad(p)).length;
-  document.getElementById("title").textContent = `${env} · ${result === "goal" ? "ENTREGADO" : result.toUpperCase()} · ${path.length - 1} pasos`;
+  const verdict = result === "goal" ? "ENTREGADO" : result === "battery" ? "SIN BATERÍA"
+    : result === "crash" && E.cause === "viento" ? "CHOQUE POR EL VIENTO" : result.toUpperCase();
+  document.getElementById("title").textContent = `${env} · ${verdict} · ${path.length - 1} pasos`;
   document.getElementById("mapinfo").textContent =
     `mapa ${ep + 1}/${episodes.length}` + (E.seed != null ? ` · semilla ${E.seed}` : "") +
     ` · ${E.columns.length} edificios` + (E.astar ? ` · A*: ${E.astar} pasos` : "") +
@@ -474,7 +543,10 @@ if (params.has("t")) t = +params.get("t");
 if (params.get("pause") === "1") setPlaying(false);
 
 function phase(i) {
-  if (i >= path.length - 1) return result === "goal" ? "✅ suministros entregados" : result === "crash" ? "💥 choque" : "⌛ sin tiempo";
+  const E = episodes[ep];
+  if (i >= path.length - 1) return result === "goal" ? "✅ suministros entregados" : result === "battery" ? "🪫 batería agotada"
+    : result === "crash" ? (E.cause === "viento" ? "💨💥 el viento lo estrelló" : "💥 choque") : "⌛ sin tiempo";
+  if (E.pushes && E.pushes.includes(i + 1)) return "💨 ráfaga: lo empuja el viento";
   const [x, y, z] = path[i], dz = path[i + 1][2] - z;
   if (x === start[0] && y === start[1]) return "⬆ despegue vertical";
   if (x === goal[0] && y === goal[1]) return "⬇ aterrizaje vertical";
@@ -549,11 +621,36 @@ renderer.setAnimationLoop(() => {
     controls.update();
   }
 
+  // Viento: flechas que cruzan el espacio de vuelo a sotavento, más rápidas con más fuerza
+  if (STORM && windGroup.userData.dir) {
+    const dir = windGroup.userData.dir, strength = windGroup.userData.strength;
+    const speed = 0.04 + 0.5 * strength;
+    const side = new THREE.Vector3(-dir.z, 0, dir.x);
+    for (const a of windArrows) {
+      a.userData.phase = (a.userData.phase + dt * speed) % 1;
+      const along = (a.userData.phase - 0.5) * 1.6 * Math.max(W, D);
+      a.position.copy(CENTER).addScaledVector(dir, along).addScaledVector(side, (a.userData.lane[0] - 0.5) * 1.2 * Math.max(W, D));
+      a.position.y = 8 + a.userData.lane[1] * (H - 8);
+      a.rotation.y = Math.atan2(-dir.z, dir.x);
+      a.visible = strength > 0.02;
+    }
+  }
   // Panel
+  const E = episodes[ep];
   const zNow = path[i][2] + (path[Math.min(i + 1, path.length - 1)][2] - path[i][2]) * s;
   $("alt").textContent = `${Math.round(zNow * cell)} m`;
   $("phase").textContent = phase(i + (tc >= segs ? 1 : 0));
   $("stepinfo").textContent = `paso ${Math.min(Math.round(tc), segs)}/${segs}`;
+  if (E.battery) {
+    const bNow = E.battery[i] + (E.battery[Math.min(i + 1, E.battery.length - 1)] - E.battery[i]) * s;
+    const frac = Math.max(0, bNow / E.capacity);
+    $("batt-pct").textContent = `${Math.round(frac * 100)}%`;
+    const fill = $("batt-fill");
+    fill.style.width = `${frac * 100}%`;
+    fill.className = "fill" + (frac < 0.15 ? " critical" : frac < 0.35 ? " low" : "");
+    const gusting = E.pushes && E.pushes.includes(i + 1) && f > 0.35 && tc < segs;
+    $("gust").style.display = gusting ? "block" : "none";
+  }
 
   composer.render();
 });

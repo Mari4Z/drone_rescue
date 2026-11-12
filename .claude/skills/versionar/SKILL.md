@@ -21,7 +21,7 @@ Sigue la guía del curso (secciones 09 a 17). El detalle y la tabla de evidencia
 | Criterios de selección | Nueva `version` en `configs/selection_criteria.yaml`, **antes** de ver resultados |
 | Dependencias | Fijarlas en `requirements.txt` o `web/package-lock.json` |
 
-Familias vigentes: `grid-drone-v1`, `drone-rescue-v2` y `drone-rescue-v3`. Ver `docs/versionamiento.md`.
+Familias vigentes: `grid-drone-v1`, `grid-drone-v2`, `drone-rescue-v2` y `drone-rescue-v3`. Ver `docs/versionamiento.md`. Los runs de `grid-drone-v2` se entrenan con `pipelines/train_grid.py`, que deja el mismo rastro que `train_ppo.py`.
 
 ## 2. Entrenar un modelo
 
