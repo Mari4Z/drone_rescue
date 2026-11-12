@@ -12,9 +12,9 @@ from mlflow import MlflowClient
 from mlflow.entities import Metric, Param
 
 
-def _rewrite_manifest(path: Path, source_run_id: str, remote_run_id: str) -> None:
+def _rewrite_manifest(path: Path, source_run_id: str, remote_run_id: str, accepted_run_ids: set[str] = frozenset()) -> None:
     manifest = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(manifest, dict) or manifest.get("run_id") != source_run_id:
+    if not isinstance(manifest, dict) or manifest.get("run_id") not in {source_run_id, *accepted_run_ids}:
         raise ValueError(f"El manifiesto no corresponde al run {source_run_id}: {path}")
     manifest["remote_run_id"] = remote_run_id
     if manifest.get("evaluation_sha256") and not manifest.get("evaluation_uri"):
@@ -60,9 +60,11 @@ def _copy_artifacts(
                 str(downloaded),
                 artifact_path=parent if parent != "." else None,
             )
+        # Una reproducción conserva el manifiesto de su propio entrenamiento (tag source_run_id)
+        accepted = {value for value in (source.get_run(source_run_id).data.tags.get("source_run_id"),) if value}
         for manifest_path in manifest_paths:
             downloaded = Path(source.download_artifacts(source_run_id, manifest_path, str(root)))
-            _rewrite_manifest(downloaded, source_run_id, remote_run_id)
+            _rewrite_manifest(downloaded, source_run_id, remote_run_id, accepted)
             destination.log_artifact(
                 remote_run_id,
                 str(downloaded),
