@@ -152,17 +152,19 @@ de Render incluido usa el plan gratuito; por sus límites de suspensión y disco
 efímero no garantiza disponibilidad continua. Para uptime permanente se
 requiere un servicio activo de pago.
 
-## Familias de cuadrícula (grid-drone-v1 y grid-drone-v2)
+## Familias de cuadrícula (grid-drone-v1, v2 y v3)
 
 `cli.py` opera dos familias aparte, de cuadrícula discreta y misión de A a B. `grid-drone-v1`
 no tiene física ni batería; `grid-drone-v2` (`DroneRescueGridStorm-v3`) añade una ciudad más
 densa con B aleatoria, viento con ráfagas que empujan al dron y una batería ajustada a cada
-mapa. No son compatibles con `drone-rescue-v2` ni resuelven la misión completa; el detalle,
+mapa; `grid-drone-v3` (`DroneRescueGridCity-v4`) lo lleva a 200 × 200 m con tendidos eléctricos
+y aves. No son compatibles con `drone-rescue-v2` ni resuelven la misión completa; el detalle,
 los resultados y sus límites están en [`docs/familia_cuadricula.md`](docs/familia_cuadricula.md).
 
 ```bash
 python cli.py envs
 python cli.py rules --env DroneRescueGridStorm-v3
+python cli.py rules --env DroneRescueGridCity-v4
 python -m pipelines.train_grid --profile configs/training/grid_storm_dqn.yaml --seed 11   # run versionado
 python cli.py eval --env DroneRescueGridStorm-v3 --model artifacts/models/<run_id>/model.pt --episodes 100
 python cli.py run  --env DroneRescueGridStorm-v3 --model artifacts/models/<run_id>/model.pt --seed 600000 --web
@@ -173,7 +175,7 @@ python cli.py run  --env DroneRescueGridStorm-v3 --model artifacts/models/<run_i
 - `api/main.py`: API FastAPI/Uvicorn para catálogo, carga, evaluación y pasos.
 - `envs/`: entorno Gymnasium canónico y reglas físicas de la simulación.
 - `agents/`: agente Q-learning tabular y DQN exploratorio de `drone-rescue-v2`.
-- `envs/grid_drone_env.py`, `agents/grid/`, `viewer/`, `cli.py`, `pipelines/train_grid.py`: familias `grid-drone-v1` y `grid-drone-v2`.
+- `envs/grid_drone_env.py`, `agents/grid/`, `viewer/`, `cli.py`, `pipelines/train_grid.py`: familias `grid-drone-v1`, `grid-drone-v2` y `grid-drone-v3`.
 - `env/` y `agent/`: adaptadores para preservar imports históricos.
 - `pipelines/train.py`: entrenamiento MLflow, evaluación greedy, checkpoint,
   Model Registry y manifiesto; `train.py` conserva la ruta CLI anterior.

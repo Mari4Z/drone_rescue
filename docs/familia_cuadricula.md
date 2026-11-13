@@ -1,7 +1,8 @@
 # Familias de la cuadrícula
 
-Dos familias: `grid-drone-v1` (la primera versión del proyecto) y `grid-drone-v2` (viento,
-batería y ciudad densa; al final de este documento).
+Tres familias: `grid-drone-v1` (la primera versión del proyecto), `grid-drone-v2` (viento,
+batería y ciudad densa) y `grid-drone-v3` (mapa de 200 × 200 m, tendidos eléctricos y aves); las
+dos últimas, al final de este documento.
 
 # Familia de modelos `grid-drone-v1`
 
@@ -107,3 +108,72 @@ semilla.
 
 Visor: `python cli.py run --env DroneRescueGridStorm-v3 --model artifacts/models/3b95307e890245d3b011bfda923b9977/model.pt --seed 600000 --maps 12 --web --web-out drone_view_storm.html`
 muestra la ciudad, las flechas y la manga de viento, la barra de batería y cada ráfaga.
+
+# Familia `grid-drone-v3`: mapa grande, tendidos eléctricos y aves
+
+Tercer experimento de la cuadrícula (13 de noviembre), a partir del DQN de `grid-drone-v2`.
+Ambiente `DroneRescueGridCity-v4` (`DroneCityEnv`, `envs/grid_drone_env.py`),
+`ENVIRONMENT_VERSION` 3.0.0, misma recompensa que v2 (`REWARD_VERSION` 2.0.0). Es otra familia:
+sus modelos esperan 59 valores y no se intercambian con `grid-drone-v2`.
+
+| | `grid-drone-v2` | `grid-drone-v3` |
+|---|---|---|
+| Mapa | 20 × 20 × 12 celdas (100 × 100 × 60 m) | **40 × 40 × 12 celdas (200 × 200 × 60 m)** |
+| Edificios | 12 a 35 | 40 a 110 (misma densidad) |
+| Tendidos eléctricos | No | **3 a 6 por mapa**: postes cada 20 a 30 m unidos por un cable a 10 m. Postes y cables bloquean y los sensores los ven; no se puede pasar por debajo (el suelo está prohibido fuera de A y B) |
+| Aves | No | **0 a 6**, entre 10 y 40 m. En cada paso se quedan (25 %) o se mueven una celda horizontal al azar. Tocar una termina el intento (−100) y el dron las detecta a 4 celdas |
+| Observación | 51 valores | **59**: las 51 más el ave más cercana por dirección (6), aves cerca (1) y fracción de ruta restante (1) |
+| Límite | 300 pasos | 600 pasos |
+
+**Referencias** (suite `grid-city-public` v1.0.0, 500 mapas, semillas 700000 a 700499;
+`pipelines/evaluate_grid_references.py`): `astar_viento` conoce el mapa completo con postes y cables,
+evita los edificios a sotavento y no ve las aves; `dqn_storm_v2` es el mejor DQN de v2 (run `3b95307e`)
+con sus 51 entradas.
+
+## Experimento `grid-city-dqn`
+
+Perfil `configs/training/grid_city_dqn.yaml`, pipeline `pipelines/train_grid.py`, 4 000 000 pasos y
+3 semillas, con los mismos hiperparámetros que `grid-storm-dqn` y un buffer de 300 000. El mejor
+checkpoint de cada semilla se elige con 100 mapas de validación (semillas 950000 en adelante),
+distintos de la suite.
+
+**Hipótesis, escrita antes de entrenar:** al menos un 50 % de éxito en 500 mapas, y menos del 10 %
+de los fallos por aves.
+
+| Política (500 mapas) | Éxito | Viento | Otro choque | Aves | Batería | Energía vs. mejor ruta |
+|---|---:|---:|---:|---:|---:|---:|
+| `astar_viento` (mapa completo, no ve aves) | 86.2 % | 5.2 % | 0 % | 1.4 % | 7.2 % | 1.10× |
+| **`grid-city-dqn` semilla 37** (run `5a8c68f2`) | **63.0 %** | 30.2 % | 3.4 % | 0.8 % | 2.6 % | 1.16× |
+| `grid-city-dqn` semilla 11 (run `2b1e7ed3`) | 56.6 % | 28.2 % | 6.4 % | 1.6 % | 7.2 % | 1.25× |
+| `grid-city-dqn` semilla 23 (run `f2337e88`) | 54.0 % | 36.8 % | 5.8 % | 1.0 % | 2.4 % | 1.14× |
+| `dqn_storm_v2` (sin ver aves, 51 entradas) | 40.6 % | 39.6 % | 16.8 % | 2.0 % | 1.0 % | — |
+
+**Decisión: la hipótesis se cumple** (54 a 63 %, media 58 %; las aves son el 2 a 4 % de los
+fallos), pero hay que leerla con los cuatro hallazgos siguientes, que le quitan valor como
+prueba de que el agente aprendió a esquivar postes, cables y aves.
+
+1. **Los postes y cables a 10 m no influyen.** En 150 mapas no cambian la ruta óptima de A\* en
+   ninguno, y esa ruta nunca baja de 20 m, porque volar por debajo de 20 m se penaliza. El dron
+   los ve, pero no tiene motivo para esquivarlos. Corrección propuesta (pendiente): postes de
+   30 m y cables entre 20 y 30 m, la altura de crucero, de modo que cruzar un tendido obligue a
+   pasar por debajo (volando bajo), por encima (más batería y más viento) o a rodearlo. Sería
+   `ENVIRONMENT_VERSION` 3.1.0 y un experimento nuevo.
+2. **Las aves casi no estorban.** A\*, que no las ve, choca con ellas en el 1.4 % de los mapas, y
+   el DQN, que sí las ve, en el 0.8 a 1.6 %. Con 6 aves como máximo en 200 × 200 m hay muy poca
+   densidad.
+3. **El viento domina y un tercio de sus choques son del despegue.** Entre el 28 y el 37 % de los
+   mapas terminan estrellados por una ráfaga, y del 30 al 38 % de esos choques ocurren en los
+   primeros 6 pasos (10 a 12 % de todos los mapas). A está en la esquina (0, 0): una ráfaga hacia
+   fuera del mapa estrella al dron antes de que pueda alejarse del borde. Por física se pierde el
+   3.4 % de los mapas en el primer ascenso aunque la política sea perfecta, y el 10.5 % si el dron
+   sigue pegado a la esquina durante 3 pasos. A\* pierde el 3.8 % porque se aleja del borde pronto;
+   el DQN pierde 10 a 12 %, así que unos 7 puntos de éxito son aprendibles. Sin los choques del
+   despegue el éxito sería de 61 a 71 %.
+4. **El DQN no es estable con 4 millones de pasos.** La semilla 11 llegó al 54 % de validación en
+   el paso 2 600 000 y cayó al 0 % en el siguiente corte, sin recuperarse en 1 400 000 pasos. Las
+   semillas 23 y 37 oscilan unos 10 puntos entre cortes. Por eso se guarda el mejor checkpoint de
+   cada semilla; la cifra de la suite corresponde a ese checkpoint, elegido con la validación.
+
+El entrenamiento duró 1.6 a 1.7 h por semilla (sin suspensiones esta vez). Visor:
+`python cli.py run --env DroneRescueGridCity-v4 --model artifacts/models/5a8c68f2d3a449488475142303fee41b/model.pt --seed 700000 --maps 12 --web --web-out drone_view_city.html`
+muestra los postes, los cables con su curva, las aves animadas, el viento, la batería y cada ráfaga.
