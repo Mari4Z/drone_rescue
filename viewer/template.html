@@ -64,7 +64,8 @@
   <div><b id="title"></b></div>
   <div id="mapinfo" class="muted"></div>
   <div style="margin-top:4px"><span class="a">● A</span> despegue &nbsp; <span class="b">● B</span> entrega
-    &nbsp; <span class="muted">edificios: <span style="color:#cbd5e1">bajos</span> → <span style="color:#94a3b8">altos</span></span></div>
+    &nbsp; <span class="muted">edificios: <span style="color:#cbd5e1">bajos</span> → <span style="color:#94a3b8">altos</span></span>
+    <span id="citylegend" class="muted" style="display:none">&nbsp; <span style="color:#fbbf24">┃</span> postes y cables &nbsp; <span style="color:#f472b6">▲</span> aves</span></div>
   <div style="margin-top:6px"><span class="badge" id="engine"></span></div>
 </div>
 <div id="gauges" class="panel">
@@ -138,13 +139,13 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;  // reflejos suaves
 
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, 6000);
-camera.position.set(W + 55, 95, 40);
+camera.position.set(W + 55 * (W / 100), 95 * Math.sqrt(W / 100), 40 * (W / 100));
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(W / 2, 12, -D / 2);
 controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI * 0.49;  // no atravesar el suelo
 controls.minDistance = 10;
-controls.maxDistance = 600;
+controls.maxDistance = 600 * Math.max(1, W / 100);
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
@@ -168,7 +169,8 @@ const sun = new THREE.DirectionalLight(0xfff1dc, 3.2);
 sun.position.copy(CENTER).addScaledVector(sunDir, 160);
 sun.target.position.copy(CENTER);
 sun.castShadow = true;
-Object.assign(sun.shadow.camera, { left: -90, right: 90, top: 90, bottom: -90, near: 10, far: 400 });
+const shadowReach = Math.max(W, D) * 0.9;
+Object.assign(sun.shadow.camera, { left: -shadowReach, right: shadowReach, top: shadowReach, bottom: -shadowReach, near: 10, far: 400 + shadowReach });
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.bias = -0.0005;
 scene.add(sun, sun.target);
@@ -457,6 +459,85 @@ const droneLight = new THREE.PointLight(0xfff7e0, 25, 25, 2);
 droneLight.position.y = -3;  // debajo del dron: ilumina el entorno sin quemar el cuerpo
 drone.add(droneLight);
 
+// ---------- Postes, cables y aves (grid-drone-v3) ----------
+const CITY = episodes.some((e) => e.birds);
+const birdMeshes = [];
+const birdMat = new THREE.MeshStandardMaterial({ color: 0xf472b6, emissive: 0xf472b6, emissiveIntensity: .6, roughness: .5 });
+function makeBird() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.ConeGeometry(.45, 1.6, 6), birdMat);
+  body.rotation.x = Math.PI / 2;
+  g.add(body);
+  for (const sx of [-1, 1]) {
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(2.2, .06, .7), birdMat);
+    wing.position.set(sx * 1.1, 0, .1);
+    wing.userData.sx = sx;
+    g.add(wing);
+  }
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(2.6, 12, 8),
+    new THREE.MeshBasicMaterial({ color: 0xf472b6, transparent: true, opacity: .07, depthWrite: false }));
+  g.add(halo);
+  g.scale.setScalar(2.2);  // más grandes que a escala real para verlas desde lejos
+  g.visible = false;
+  scene.add(g);
+  return g;
+}
+if (CITY) for (let k = 0; k < 6; k++) birdMeshes.push(makeBird());
+function addPolesAndCables(E, group) {
+  if (!E.poles) return;
+  const h = (E.pole_height || 2) * cell;
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, emissive: 0xb45309, emissiveIntensity: .25 });
+  for (const [x, y] of E.poles) {
+    const w = toWorld([x, y, 0]);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(.18, .25, h, 8), poleMat);
+    pole.position.set(w.x, h / 2, w.z);
+    pole.castShadow = true;
+    group.add(pole);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(2.2, .18, .18), poleMat);
+    arm.position.set(w.x, h - .3, w.z);
+    group.add(arm);
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(.3, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff3c4 }));
+    lamp.position.set(w.x, h - .6, w.z);
+    group.add(lamp);
+  }
+  // Cables: un tubo por cada tramo contiguo (celdas de cable + postes a ambos lados), a la altura del cable
+  const cableSet = new Set(E.cables.map(([x, y]) => `${x},${y}`));
+  const poleSet = new Set(E.poles.map(([x, y]) => `${x},${y}`));
+  const cableMat = new THREE.MeshBasicMaterial({ color: 0x1f2937 });
+  const seen = new Set();
+  for (const [x, y] of E.poles) {
+    for (const [dx, dy] of [[1, 0], [0, 1]]) {
+      let cx = x + dx, cy = y + dy;
+      if (!cableSet.has(`${cx},${cy}`)) continue;
+      const key = `${x},${y}:${dx},${dy}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      while (cableSet.has(`${cx},${cy}`)) { cx += dx; cy += dy; }
+      if (!poleSet.has(`${cx},${cy}`)) continue;
+      const a = toWorld([x, y, 0]), b = toWorld([cx, cy, 0]);
+      const mid = a.clone().add(b).multiplyScalar(.5);
+      mid.y = h - .35;
+      const sag = new THREE.QuadraticBezierCurve3(new THREE.Vector3(a.x, h - .3, a.z), new THREE.Vector3(mid.x, h - 1.4, mid.z), new THREE.Vector3(b.x, h - .3, b.z));
+      group.add(new THREE.Mesh(new THREE.TubeGeometry(sag, 12, .07, 5, false), cableMat));
+    }
+  }
+}
+function showBirds(E, i, f) {
+  if (!E.birds) { birdMeshes.forEach((b) => (b.visible = false)); return; }
+  const now = E.birds[Math.min(i, E.birds.length - 1)], next = E.birds[Math.min(i + 1, E.birds.length - 1)];
+  birdMeshes.forEach((mesh, k) => {
+    const b = now[k];
+    if (!b) { mesh.visible = false; return; }
+    const n = next[k] || b;
+    const p = toWorld(b).lerp(toWorld(n), f);
+    mesh.visible = true;
+    mesh.position.copy(p);
+    const dir = toWorld(n).sub(toWorld(b));
+    if (dir.lengthSq() > .01) mesh.rotation.y = Math.atan2(dir.x, dir.z);
+    mesh.children.forEach((c) => { if (c.userData.sx) c.rotation.z = c.userData.sx * Math.sin(performance.now() / 90 + k) * .5; });
+  });
+}
+
 // ---------- Mapa actual: edificios + ruta ----------
 let mapGroup = null, path, result, pts, curve, trail, ep = 0, segs = 1, t = 0;
 const RADIAL = 8, PER_SEG = 6;
@@ -479,6 +560,8 @@ function loadEpisode(i) {
   document.getElementById("battery").style.display = E.battery ? "block" : "none";
   document.getElementById("wind").style.display = E.battery ? "block" : "none";
   for (const c of E.columns) building(...c, mapGroup);
+  addPolesAndCables(E, mapGroup);
+  document.getElementById("citylegend").style.display = E.poles ? "inline" : "none";
 
   pts = path.map(toWorld);
   pts[0].y = 1.6; pts[pts.length - 1].y = 1.6;  // A y B a ras de helipuerto
@@ -496,12 +579,13 @@ function loadEpisode(i) {
 
   const climbs = path.slice(1).filter((p, k) => p[2] !== path[k][2] && !isPad(p)).length;
   const verdict = result === "goal" ? "ENTREGADO" : result === "battery" ? "SIN BATERÍA"
-    : result === "crash" && E.cause === "viento" ? "CHOQUE POR EL VIENTO" : result.toUpperCase();
+    : result === "crash" && E.cause === "viento" ? "CHOQUE POR EL VIENTO"
+    : result === "crash" && E.cause === "ave" ? "CHOQUE CON UN AVE" : result.toUpperCase();
   document.getElementById("title").textContent = `${env} · ${verdict} · ${path.length - 1} pasos`;
   document.getElementById("mapinfo").textContent =
     `mapa ${ep + 1}/${episodes.length}` + (E.seed != null ? ` · semilla ${E.seed}` : "") +
-    ` · ${E.columns.length} edificios` + (E.astar ? ` · A*: ${E.astar} pasos` : "") +
-    ` · ${climbs} cambios de altura en vuelo`;
+    ` · ${E.columns.length} edificios` + (E.poles ? ` · ${E.poles.length} postes · ${E.birds[0].length} aves` : "") +
+    (E.astar ? ` · A*: ${E.astar} pasos` : "") + ` · ${climbs} cambios de altura en vuelo`;
   timeline.max = segs;
   t = 0;
 }
@@ -545,7 +629,7 @@ if (params.get("pause") === "1") setPlaying(false);
 function phase(i) {
   const E = episodes[ep];
   if (i >= path.length - 1) return result === "goal" ? "✅ suministros entregados" : result === "battery" ? "🪫 batería agotada"
-    : result === "crash" ? (E.cause === "viento" ? "💨💥 el viento lo estrelló" : "💥 choque") : "⌛ sin tiempo";
+    : result === "crash" ? (E.cause === "viento" ? "💨💥 el viento lo estrelló" : E.cause === "ave" ? "🐦💥 chocó con un ave" : "💥 choque") : "⌛ sin tiempo";
   if (E.pushes && E.pushes.includes(i + 1)) return "💨 ráfaga: lo empuja el viento";
   const [x, y, z] = path[i], dz = path[i + 1][2] - z;
   if (x === start[0] && y === start[1]) return "⬆ despegue vertical";
@@ -635,6 +719,7 @@ renderer.setAnimationLoop(() => {
       a.visible = strength > 0.02;
     }
   }
+  showBirds(episodes[ep], i, s);
   // Panel
   const E = episodes[ep];
   const zNow = path[i][2] + (path[Math.min(i + 1, path.length - 1)][2] - path[i][2]) * s;

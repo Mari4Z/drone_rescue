@@ -12,7 +12,7 @@ def export_html(episodes, env_id, out="drone_view.html"):
     data = {
         "env": env_id,
         "cell": CELL,
-        "size": [NX, NY, NZ],
+        "size": episodes[0].get("size", [NX, NY, NZ]) if episodes else [NX, NY, NZ],
         "start": list(START),
         "goal": list(GOAL),
         "episodes": [

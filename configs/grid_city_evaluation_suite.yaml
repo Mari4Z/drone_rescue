@@ -1,0 +1,11 @@
+# Suite de la familia grid-drone-v3 (DroneRescueGridCity-v4). No es comparable con las de
+# grid-drone-v1, grid-drone-v2 ni con las de drone-rescue-v2/v3: otra dinámica y otra observación.
+evaluation_suite_id: grid-city-public
+version: 1.0.0
+split: public_validation
+environment: DroneRescueGridCity-v4
+first_seed: 700000   # mapas 700000 a 700499; la validación usa 950000+ y el entrenamiento, el generador sin semilla fija
+episodes: 500
+references:
+  - astar_viento       # A* con el mapa completo (edificios, postes y cables), evita sotavento, no ve las aves
+  - dqn_storm_v2       # el mejor DQN de grid-drone-v2 (run 3b95307e), con sus 51 entradas, sin ver las aves

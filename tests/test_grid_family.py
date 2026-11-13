@@ -145,7 +145,55 @@ def test_storm_replanner_and_cli_reject_v1_model(tmp_path):
     assert run.returncode != 0 and "espera 46 observaciones" in run.stderr
 
 
-@pytest.mark.parametrize("args", [["envs"], ["rules", "--env", "DroneRescueGridRandom-v2"], ["rules", "--env", "DroneRescueGridStorm-v3"]])
+def _city(seed):
+    env = gym.make("DroneRescueGridCity-v4").unwrapped
+    env.reset(seed=seed)
+    return env
+
+
+def test_city_map_and_observation():
+    a, b = _city(7), _city(7)
+    assert a.shape == grid.CITY_SHAPE and a.observation_space.shape == (grid.CITY_N_OBS,)
+    assert a.columns == b.columns and a.lines == b.lines and a.birds == b.birds and a.goal == b.goal
+    assert grid.CITY_COLUMNS[0] <= len(a.columns) <= grid.CITY_COLUMNS[1] and len(a.birds) <= grid.CITY_BIRDS[1]
+    for x, y in a.poles:  # poste: bloqueado hasta 10 m; cable: solo la celda de 5 a 10 m
+        assert a.blocked(x, y, 1) and not a.blocked(x, y, grid.CITY_POLE_HEIGHT)
+    for x, y in a.cables:
+        assert a.blocked(x, y, 1) and not a.blocked(x, y, 2)
+    route = astar(a)
+    assert route[0] == a.start and route[-1] == a.goal and not any(a.blocked(*c) for c in route)
+    for bird in a.birds:
+        assert not a.blocked(*bird) and grid.CITY_BIRD_Z[0] <= bird[2] <= grid.CITY_BIRD_Z[1]
+
+
+def test_city_bird_collision_and_sensing():
+    env = _city(2)
+    env.wind = 0.0
+    env.birds = [(10, 10, 5)]
+    env.pos = (10, 8, 5)
+    features = env._bird_features()
+    assert features[2] == pytest.approx(1 / grid.CITY_BIRD_SENSE)  # +y: el ave está a 2 celdas, 1 libre
+    assert features[6] == pytest.approx(1 / grid.CITY_BIRDS[1])    # una ave cerca
+    env.pos = (10, 9, 5)
+    _, reward, terminated, _, info = env.step(2)                    # +y: entra en la celda del ave
+    assert terminated and reward == grid.R_BIRD and info["cause"] == "ave"
+
+
+def test_city_birds_stay_off_obstacles_and_history_matches_steps():
+    env = _city(4)
+    env.wind = 0.0
+    steps = 0
+    done = False
+    while not done and steps < 40:
+        _, _, terminated, truncated, _ = env.step(4 if steps < 3 else 0)
+        done = terminated or truncated
+        steps += 1
+        assert all(not env._static_blocked(*b) for b in env.birds) and len(set(env.birds)) == len(env.birds)
+    assert len(env.bird_history) == steps + 1
+
+
+@pytest.mark.parametrize("args", [["envs"], ["rules", "--env", "DroneRescueGridRandom-v2"], ["rules", "--env", "DroneRescueGridStorm-v3"],
+                                  ["rules", "--env", "DroneRescueGridCity-v4"]])
 def test_cli_commands_run(args):
     result = subprocess.run([sys.executable, "cli.py", *args], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr

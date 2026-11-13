@@ -35,8 +35,11 @@ ENVS = {
     "DroneRescueGridRandom-v2": "mapa aleatorio en cada intento + sensores + altura de crucero (DQN)",
     "DroneRescueGridFixed-v2": "mapa fijo de 5 columnas con la observación de v2 (prueba del DQN)",
     "DroneRescueGridStorm-v3": "grid-drone-v2: 12 a 35 edificios, B aleatorio, viento con ráfagas y batería (DQN)",
+    "DroneRescueGridCity-v4": "grid-drone-v3: 200 x 200 m, tendidos eléctricos con cables y hasta 6 aves, más viento y batería (DQN)",
 }
 STORM = "DroneRescueGridStorm-v3"
+CITY = "DroneRescueGridCity-v4"
+STORM_LIKE = (STORM, CITY)
 DEFAULT_ENV = {"dqn": "DroneRescueGridRandom-v2", "qlearning": "DroneRescueGridDummy-v1"}
 KEYS = {"d": 0, "a": 1, "w": 2, "s": 3, "r": 4, "f": 5}  # +x, -x, +y, -y, subir, bajar
 
@@ -81,7 +84,7 @@ def cmd_rules(args):
     e.reset(seed=args.seed)
     v2 = hasattr(e, "random_map")
     print(f"""Entorno {env_id}: {ENVS[env_id]}
-  Mapa: 100 x 100 x 60 m, celdas de {CELL} m ({NX} x {NY} x {NZ})
+  Mapa: {e.shape[0] * CELL if hasattr(e, "shape") else NX * CELL} x {e.shape[1] * CELL if hasattr(e, "shape") else NY * CELL} x {NZ * CELL} m, celdas de {CELL} m
   A (inicio): {START}   B (meta): {GOAL}
   Columnas: {len(e.columns)}{' (aleatorias en cada intento; ejemplo:)' if v2 and e.random_map else ''}
     {e.columns}
@@ -93,10 +96,10 @@ def cmd_rules(args):
     if e.min_cruise_z:
         print(f"    - Volar por debajo de {e.min_cruise_z * CELL} m (fuera de A y B) penaliza {R_LOW:+}/paso.")
     print(f"  Recompensas: meta {R_GOAL:+} | choque {R_CRASH:+} | paso {R_STEP:+} | acercarse a B {R_PROGRESS:+}/celda")
-    if v2 and env_id != STORM:
+    if v2 and env_id not in STORM_LIKE:
         print(f"  Observación (46): posición, vector hacia B, 6 sensores de distancia (hasta {SENSOR_RANGE * CELL} m),"
               " ocupación del cubo 3x3x3 alrededor del dron y visitas a la celda y sus vecinas")
-    if env_id == STORM:
+    if env_id in STORM_LIKE:
         import envs.grid_drone_env as g
         print(f"""  B cambia en cada mapa (a {g.GOAL_MIN_DIST} celdas o más de A). Este mapa: B = {e.goal}
   Viento: dirección y fuerza por intento (hasta {g.WIND_MAX}). Tras cada movimiento en el aire, una ráfaga empuja
@@ -107,6 +110,13 @@ def cmd_rules(args):
     Capacidad = mejor ruta x {g.BATTERY_MARGIN[0]} a {g.BATTERY_MARGIN[1]} + {g.BATTERY_RESERVE}. Este mapa: {e.capacity:.1f}.
     Sin batería: {g.R_BATTERY:+} y termina. Recompensa por paso: -energía (en vez de {R_STEP:+}).
   Observación (51): las 46 de v2, viento (2), probabilidad de ráfaga a esta altura, batería y margen hasta B""")
+    if env_id == CITY:
+        import envs.grid_drone_env as g
+        print(f"""  Tendidos eléctricos: {g.CITY_POLE_LINES[0]} a {g.CITY_POLE_LINES[1]} por mapa, postes cada {g.CITY_POLE_SPACING[0] * CELL} a {(g.CITY_POLE_SPACING[1] - 1) * CELL} m
+    unidos por un cable a {g.CITY_POLE_HEIGHT * CELL} m. Los sensores los ven; hay que sobrevolarlos. Este mapa: {len(e.lines)} tendidos, {len(e.poles)} postes.
+  Aves: hasta {g.CITY_BIRDS[1]} por mapa entre {g.CITY_BIRD_Z[0] * CELL} y {g.CITY_BIRD_Z[1] * CELL} m; cada paso se quedan ({g.BIRD_STAY:.0%}) o dan un paso horizontal al azar.
+    Tocar una estrella al dron ({g.R_BIRD:+}). Se detectan a {g.CITY_BIRD_SENSE} celdas en cada dirección. Este mapa: {len(e.birds)} aves.
+  Observación (59): las 51 anteriores + ave más cercana por dirección (6), aves cerca (1) y fracción de ruta restante (1)""")
 
 
 def cmd_train(args):
@@ -117,7 +127,7 @@ def cmd_train(args):
         from agents.grid.dqn import train_dqn
 
         def eval_fn(agent):
-            if env_id == STORM:
+            if env_id in STORM_LIKE:
                 m = evaluate_storm(agent, env_id, episodes=args.eval_episodes)["metrics"]
                 return "eval " + fmt_storm(m), score_storm(m)
             m = evaluate(agent, env_id, episodes=args.eval_episodes)
@@ -139,7 +149,7 @@ def cmd_eval(args):
     env_id = env_for(args, algo)
     _, policy = load_policy(args.model, args.device, env_id)
     print(f"{args.model} en {env_id}, {args.episodes} mapas (semillas {args.seed}..{args.seed + args.episodes - 1})")
-    if env_id == STORM:
+    if env_id in STORM_LIKE:
         m = evaluate_storm(policy, env_id, episodes=args.episodes, seed=args.seed)["metrics"]
         print(" ", fmt_storm(m), "|", m["cause_counts"])
         return
@@ -171,7 +181,7 @@ def cmd_run(args):
         line = (f"semilla {seed:7d} | {len(env.columns):2d} columnas | {result:7s} | "
                 f"{len(path) - 1:3d} pasos (A*: {len(best) - 1}) | altura máx. {max(p[2] for p in path) * CELL} m"
                 f" | {mid_flight_climbs(path)} cambios de altura en vuelo")
-        if env_id == STORM:
+        if env_id in STORM_LIKE:
             episode.update({
                 "start": list(env.start), "goal": list(env.goal), "cause": trace[-1].get("cause"),
                 "wind": round(env.wind, 4), "wind_dir": [round(float(v), 4) for v in env.wind_dir],
@@ -180,6 +190,11 @@ def cmd_run(args):
             })
             line += (f" | viento {env.wind:.2f} | {env.pushes} ráfagas | batería {max(env.battery, 0) / env.capacity:4.0%}"
                      + (" | choque por el viento" if trace[-1].get("cause") == "viento" else ""))
+        if env_id == CITY:
+            episode.update({"size": list(env.shape), "poles": [list(c) for c in env.poles], "cables": [list(c) for c in env.cables],
+                            "pole_height": env.poles and __import__("envs.grid_drone_env", fromlist=["x"]).CITY_POLE_HEIGHT,
+                            "birds": [[list(b) for b in frame] for frame in env.bird_history]})
+            line += f" | {len(env.lines)} tendidos | {len(env.birds)} aves" + (" | choque con un ave" if trace[-1].get("cause") == "ave" else "")
         episodes.append(episode)
         print(line)
     if len(episodes) == 1:

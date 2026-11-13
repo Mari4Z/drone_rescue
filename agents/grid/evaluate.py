@@ -60,6 +60,7 @@ def storm_episode(e, policy, seed):
         "battery_left_frac": round(max(env.battery, 0.0) / env.capacity, 4),
         "best_route_energy": round(best, 3), "pushes": env.pushes,
         "max_altitude_m": max(p[2] for p in path) * CELL,
+        **({"birds": len(getattr(env, "bird_history", [[]])[0]), "lines": len(env.lines)} if hasattr(env, "lines") else {}),
     }
 
 
@@ -72,15 +73,16 @@ def evaluate_storm(policy, env_id="DroneRescueGridStorm-v3", episodes=100, seed=
 
 
 def storm_metrics(rows):
-    causes = Counter(r["result"] + ("_viento" if r["cause"] == "viento" else "") for r in rows)
+    causes = Counter(r["result"] + (f"_{r['cause']}" if r["cause"] in ("viento", "ave") else "") for r in rows)
     goals = [r for r in rows if r["result"] == "goal"]
     n = len(rows)
     return {
         "episodes": n,
         "success_rate": causes["goal"] / n,
         "cause_counts": dict(causes),
-        "crash_rate": (causes["crash"] + causes["crash_viento"]) / n,
+        "crash_rate": (causes["crash"] + causes["crash_viento"] + causes["crash_ave"]) / n,
         "wind_crash_rate": causes["crash_viento"] / n,
+        "bird_crash_rate": causes["crash_ave"] / n,
         "battery_rate": causes["battery"] / n,
         "timeout_rate": causes["timeout"] / n,
         "mean_steps": float(np.mean([r["steps"] for r in rows])),
@@ -99,7 +101,7 @@ def fmt(m):
 
 
 def fmt_storm(m):
-    s = f"éxito {m['success_rate']:.0%} | choque {m['crash_rate']:.0%} (viento {m['wind_crash_rate']:.0%}) | batería {m['battery_rate']:.0%}"
+    s = f"éxito {m['success_rate']:.0%} | choque {m['crash_rate']:.0%} (viento {m['wind_crash_rate']:.0%}" + (f", aves {m['bird_crash_rate']:.0%}" if m.get("bird_crash_rate") else "") + f") | batería {m['battery_rate']:.0%}"
     if m["energy_ratio"]:
         s += f" | energía {m['energy_ratio']:.2f}x"
     return s

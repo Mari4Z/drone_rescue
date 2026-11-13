@@ -1,0 +1,37 @@
+model_family: grid-drone-v3
+experiment:
+  id: grid-city-dqn
+  baseline: grid-storm-dqn
+  changed_dimension: ambiente (mapa de 200 x 200 m, tendidos eléctricos con cables, hasta 6 aves)
+  hypothesis: >-
+    En una ciudad de 200 x 200 m con tendidos eléctricos y hasta 6 aves que vuelan al azar,
+    el mismo DQN que alcanzó el 62 % en grid-drone-v2, observando además la distancia a las aves,
+    mantiene al menos un 50 % de éxito en 500 mapas, y menos del 10 % de sus fallos son por aves
+    (a diferencia del DQN de grid-drone-v2, que no las ve). El reto principal será el viento en
+    rutas el doble de largas; los cables, visibles para los sensores, se sobrevuelan igual que
+    un edificio bajo. Se espera que quede por debajo de A* con margen al viento, que conoce el
+    mapa completo pero no ve las aves.
+environment:
+  id: DroneRescueGridCity-v4
+evaluation_suite: configs/grid_city_evaluation_suite.yaml
+training:
+  steps: 4000000     # rutas de 60 a 100 pasos: más experiencia por episodio que en v2
+  eval_every: 200000
+  device: cpu
+  torch_threads: 2
+  validation:
+    first_seed: 950000
+    episodes: 100
+  agent:             # los mismos hiperparámetros que grid-storm-dqn, con más memoria de repetición
+    lr: 0.0005
+    gamma: 0.99
+    hidden: 256
+    batch_size: 128
+    buffer_size: 300000
+    learning_starts: 5000
+    train_freq: 2
+    target_every: 2000
+    actor_every: 500
+    eps_end: 0.05
+    eps_fraction: 0.4
+    reward_scale: 0.1
