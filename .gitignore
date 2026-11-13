@@ -18,6 +18,7 @@ web/.vite/
 .env
 .env.*
 !.env.example
+!web/.env.production
 
 # Entrenamientos y resultados locales
 mlruns/
