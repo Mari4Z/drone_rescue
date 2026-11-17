@@ -1,0 +1,12 @@
+# Suite de la familia grid-drone-v3, ambiente 3.1.0 (DroneRescueGridCityHard-v0). No es comparable con la
+# grid-city-public de la 3.0.0 (otro ambiente: postes de 30 m, aves con zona de peligro, A en (4, 4)).
+evaluation_suite_id: grid-city-hard-public
+version: 1.0.0
+split: public_validation
+environment: DroneRescueGridCityHard-v0
+first_seed: 800000   # mapas 800000 a 800499; la validación usa 960000+ y el entrenamiento, el generador sin semilla fija
+episodes: 500
+references:
+  - astar_viento      # A* con el mapa completo (edificios, postes y cables), evita sotavento; NO ve las aves
+  - astar_consciente  # el mismo A*, que además conoce la posición y el rumbo de todas las aves
+  - dqn_city_v4       # el mejor DQN de la ciudad 3.0.0 (run 5a8c68f2), sin haberse entrenado con esta dificultad

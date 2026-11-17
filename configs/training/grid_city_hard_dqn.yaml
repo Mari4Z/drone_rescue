@@ -1,0 +1,36 @@
+model_family: grid-drone-v3
+experiment:
+  id: grid-city-hard-dqn
+  baseline: grid-city-dqn
+  changed_dimension: ambiente 3.1.0 (tendidos largos de postes de 30 m con cable a 20-30 m, aves con rumbo persistente y zona de peligro de 1 celda, A en (4, 4), margen de batería 1.3-1.7)
+  hypothesis: >-
+    Entrenado en el ambiente 3.1.0, el DQN alcanza una media de al menos 57 % de éxito en 500 mapas
+    (diez puntos más que el DQN de la ciudad 3.0.0, que sin haberse entrenado aquí logra 47.4 %), con al
+    menos 50 % en cada una de las 3 semillas, y sus choques con aves no pasan del 15 % de los mapas en
+    ninguna semilla (el DQN 3.0.0 tiene 31.8 % y el A* ciego, 55.4 %). Queda por debajo del A* consciente
+    (87.4 %), que conoce la posición y el rumbo de todas las aves. Cifras de referencia medidas en la suite
+    grid-city-hard-public (mapas 800000 a 800499) antes de entrenar.
+environment:
+  id: DroneRescueGridCityHard-v0
+evaluation_suite: configs/grid_city_hard_evaluation_suite.yaml
+training:
+  steps: 3000000     # el DQN de grid-city-dqn se desestabilizó pasados 2.6 millones de pasos
+  eval_every: 150000
+  device: cpu
+  torch_threads: 2
+  validation:
+    first_seed: 960000
+    episodes: 100
+  agent:             # los mismos hiperparámetros que grid-city-dqn
+    lr: 0.0005
+    gamma: 0.99
+    hidden: 256
+    batch_size: 128
+    buffer_size: 300000
+    learning_starts: 5000
+    train_freq: 2
+    target_every: 2000
+    actor_every: 500
+    eps_end: 0.05
+    eps_fraction: 0.4
+    reward_scale: 0.1

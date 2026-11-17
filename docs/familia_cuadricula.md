@@ -177,3 +177,71 @@ prueba de que el agente aprendió a esquivar postes, cables y aves.
 El entrenamiento duró 1.6 a 1.7 h por semilla (sin suspensiones esta vez). Visor:
 `python cli.py run --env DroneRescueGridCity-v4 --model artifacts/models/5a8c68f2d3a449488475142303fee41b/model.pt --seed 700000 --maps 12 --web --web-out drone_view_city.html`
 muestra los postes, los cables con su curva, las aves animadas, el viento, la batería y cada ráfaga.
+
+## Ambiente 3.1.0 (`DroneRescueGridCityHard-v0`): obstáculos que importan
+
+Corrige los hallazgos 1 y 2 de `grid-city-dqn`: los postes a 10 m y las aves de paso al azar no
+afectaban la ruta. Es la versión 3.1.0 del ambiente de `grid-drone-v3` (clase `DroneCityHardEnv`); el
+3.0.0 (`DroneRescueGridCity-v4`) queda intacto, con una prueba que congela sus mapas, para que
+`grid-city-dqn` siga siendo reproducible. La observación (59 valores), la recompensa, el viento y la
+batería son los mismos; los modelos de 3.0.0 se pueden evaluar en 3.1.0.
+
+| | 3.0.0 (`DroneRescueGridCity-v4`) | 3.1.0 (`DroneRescueGridCityHard-v0`) |
+|---|---|---|
+| Tendidos | 3 a 6 cortos; poste de 10 m, cable a 5-10 m | **4 a 7 largos que cruzan el mapa; poste de 30 m, cable a 20-30 m**, la altura de crucero |
+| Aves | 0 a 6; paso al azar; choque si entra en la celda del dron | **4 a 6, a menos de 30 m de la ruta ideal; mantienen su rumbo 6 a 12 pasos y luego lo cambian al azar; zona de peligro de 1 celda (5 m)**: entrar en ella es choque. El sensor mide la distancia a esa zona |
+| Punto A | Esquina (0, 0) | **(4, 4)**: una ráfaga hacia fuera del mapa ya no estrella al dron en el despegue |
+| Capacidad de batería | mejor ruta × 1.15 a 1.5 + 3 | **mejor ruta × 1.3 a 1.7 + 3**: los rodeos gastan batería |
+
+**Cómo se decidió la dificultad.** Antes de entrenar, `scripts/probe_grid_difficulty.py` mide con A\* cuánto
+estorba cada configuración (100 a 150 mapas, unos ±5 puntos; `artifacts/results/grid_city_dificultad_sonda.json`).
+A\* ciego no ve las aves; A\* consciente conoce la posición y el rumbo de todas, pero sus rodeos gastan
+batería, así que no es una cota de lo alcanzable.
+
+| Postes y cables (150 mapas, sin aves) | La ruta óptima cambia | Energía extra | Cruces: por debajo / por encima |
+|---|---:|---:|---|
+| 3.0.0: poste 10 m, cable 5-10 m, tendidos cortos | **0 %** | 0 % | 0 / 142 |
+| Poste 30 m, cable 20-30 m, tendidos cortos | 56 % | +0.8 % | 13 / 36 |
+| **Lo anterior con tendidos largos (elegido)** | **78 %** | +2.9 % | 15 / 175 |
+| Poste 40 m, cable 15-35 m, tendidos largos | 82 % | +4.4 % | 14 / 211 |
+
+| Aves (100 mapas) | A\* ciego: éxito / fallo por aves | A\* consciente: éxito / fallo por aves |
+|---|---|---|
+| 3.0.0: 0 a 6 al azar | 88 % / 0 % | 87 % / 0 % |
+| 6 siempre, al azar | 85 % / 6 % | 91 % / 0 % |
+| 4 a 6 cerca de la ruta, rumbo persistente | 78 % / 9 % | 84 % / 0 % |
+| **Lo anterior + zona de peligro de 1 celda (elegido)** | **36 % / 56 %** | **67 % / 2 %** |
+| Lo anterior + 2 celdas por paso | 26 % / 64 % | 55 % / 11 % |
+
+Con las dos cosas y los ajustes de A y de la batería (fila "ambiente 3.1.0" de la sonda), A\* ciego
+logra 43 % y A\* consciente 87 %. Con A en la esquina y el margen anterior, A\* consciente perdía el 19 %
+de los mapas por quedarse sin batería (7 % con el margen nuevo) y A\* el 3 a 4 % por viento en el despegue (0 a 3 %
+ahora). Dos celdas por paso se descartó porque ni A\* consciente esquiva bien a las aves (11 % de choques).
+
+**Referencias** (suite `grid-city-hard-public` v1.0.0, 500 mapas, semillas 800000 a 800499, medidas antes de
+entrenar; `pipelines/evaluate_grid_references.py`, `artifacts/results/grid_city_hard_referencias.json`):
+
+| Política | Éxito | Aves | Viento | Otro choque | Batería |
+|---|---:|---:|---:|---:|---:|
+| `astar_consciente` (ve las aves) | **87.4 %** | 1.8 % | 2.2 % | 0 % | 8.6 % |
+| `dqn_city_v4`: el mejor DQN de 3.0.0 (run `5a8c68f2`), sin entrenar aquí | 47.4 % | 31.8 % | 18.4 % | 1.4 % | 1.0 % |
+| `astar_viento` (ciego a las aves) | 42.8 % | 55.4 % | 1.4 % | 0 % | 0.4 % |
+
+El DQN de 3.0.0 baja de 63 % a 47 %, casi todo por aves (de 0.8 % a 31.8 %). Los postes y cables apenas le
+cuestan choques (1.4 % de "otros"): los esquiva como esquiva los edificios, porque sus sensores los ven. El
+reto nuevo de verdad son las aves; los tendidos largos obligan a subir a 30 m o más (175 de 190 cruces
+óptimos) y cambian la ruta en 78 % de los mapas. Una dificultad adicional posible, que no se aplica aquí:
+cables que los sensores solo detecten a 2 celdas.
+
+### Experimento `grid-city-hard-dqn`
+
+Perfil `configs/training/grid_city_hard_dqn.yaml`: 3 semillas (11, 23 y 37), 3 000 000 pasos y los mismos
+hiperparámetros que `grid-city-dqn`. El mejor checkpoint de cada semilla se elige con 100 mapas de
+validación (semillas 960000 en adelante), distintos de la suite.
+
+**Hipótesis, escrita antes de entrenar y con las referencias de arriba ya medidas:** el DQN alcanza una
+media de al menos 57 % de éxito (diez puntos más que `dqn_city_v4`), con al menos 50 % en cada semilla, y
+sus choques con aves no pasan del 15 % de los mapas en ninguna (frente a 31.8 % y 55.4 %). Queda por debajo
+de `astar_consciente` (87.4 %).
+
+Resultados: se añaden al terminar el entrenamiento.

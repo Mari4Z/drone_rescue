@@ -477,6 +477,15 @@ function makeBird() {
   const halo = new THREE.Mesh(new THREE.SphereGeometry(2.6, 12, 8),
     new THREE.MeshBasicMaterial({ color: 0xf472b6, transparent: true, opacity: .07, depthWrite: false }));
   g.add(halo);
+  // Zona de peligro (grid-drone-v3, ambiente 3.1.0): cubo de 2 * radio + 1 celdas de lado
+  const zone = new THREE.Group();
+  zone.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1),
+    new THREE.MeshBasicMaterial({ color: 0xf472b6, transparent: true, opacity: .09, depthWrite: false })));
+  zone.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
+    new THREE.LineBasicMaterial({ color: 0xf472b6, transparent: true, opacity: .55 })));
+  zone.visible = false;
+  g.add(zone);
+  g.userData = { halo, zone };
   g.scale.setScalar(2.2);  // más grandes que a escala real para verlas desde lejos
   g.visible = false;
   scene.add(g);
@@ -486,6 +495,8 @@ if (CITY) for (let k = 0; k < 6; k++) birdMeshes.push(makeBird());
 function addPolesAndCables(E, group) {
   if (!E.poles) return;
   const h = (E.pole_height || 2) * cell;
+  // Banda del cable (ambiente 3.1.0): dos cables, cerca de su límite inferior y del superior. Antes, uno en la punta del poste.
+  const heights = E.cable_z ? [E.cable_z[0] * cell + 2, (E.cable_z[1] + 1) * cell - 2] : [h - .3];
   const poleMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, emissive: 0xb45309, emissiveIntensity: .25 });
   for (const [x, y] of E.poles) {
     const w = toWorld([x, y, 0]);
@@ -493,9 +504,11 @@ function addPolesAndCables(E, group) {
     pole.position.set(w.x, h / 2, w.z);
     pole.castShadow = true;
     group.add(pole);
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(2.2, .18, .18), poleMat);
-    arm.position.set(w.x, h - .3, w.z);
-    group.add(arm);
+    for (const hh of heights) {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(2.2, .18, .18), poleMat);
+      arm.position.set(w.x, hh, w.z);
+      group.add(arm);
+    }
     const lamp = new THREE.Mesh(new THREE.SphereGeometry(.3, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff3c4 }));
     lamp.position.set(w.x, h - .6, w.z);
     group.add(lamp);
@@ -516,9 +529,10 @@ function addPolesAndCables(E, group) {
       if (!poleSet.has(`${cx},${cy}`)) continue;
       const a = toWorld([x, y, 0]), b = toWorld([cx, cy, 0]);
       const mid = a.clone().add(b).multiplyScalar(.5);
-      mid.y = h - .35;
-      const sag = new THREE.QuadraticBezierCurve3(new THREE.Vector3(a.x, h - .3, a.z), new THREE.Vector3(mid.x, h - 1.4, mid.z), new THREE.Vector3(b.x, h - .3, b.z));
-      group.add(new THREE.Mesh(new THREE.TubeGeometry(sag, 12, .07, 5, false), cableMat));
+      for (const hh of heights) {
+        const sag = new THREE.QuadraticBezierCurve3(new THREE.Vector3(a.x, hh, a.z), new THREE.Vector3(mid.x, hh - 1.1, mid.z), new THREE.Vector3(b.x, hh, b.z));
+        group.add(new THREE.Mesh(new THREE.TubeGeometry(sag, 12, .07, 5, false), cableMat));
+      }
     }
   }
 }
@@ -532,6 +546,10 @@ function showBirds(E, i, f) {
     const p = toWorld(b).lerp(toWorld(n), f);
     mesh.visible = true;
     mesh.position.copy(p);
+    const hasZone = E.bird_radius != null;
+    mesh.userData.halo.visible = !hasZone;
+    mesh.userData.zone.visible = hasZone;
+    if (hasZone) mesh.userData.zone.scale.setScalar(((2 * E.bird_radius + 1) * cell) / 2.2);
     const dir = toWorld(n).sub(toWorld(b));
     if (dir.lengthSq() > .01) mesh.rotation.y = Math.atan2(dir.x, dir.z);
     mesh.children.forEach((c) => { if (c.userData.sx) c.rotation.z = c.userData.sx * Math.sin(performance.now() / 90 + k) * .5; });

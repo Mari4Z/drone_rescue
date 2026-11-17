@@ -35,11 +35,14 @@ ENVS = {
     "DroneRescueGridRandom-v2": "mapa aleatorio en cada intento + sensores + altura de crucero (DQN)",
     "DroneRescueGridFixed-v2": "mapa fijo de 5 columnas con la observación de v2 (prueba del DQN)",
     "DroneRescueGridStorm-v3": "grid-drone-v2: 12 a 35 edificios, B aleatorio, viento con ráfagas y batería (DQN)",
-    "DroneRescueGridCity-v4": "grid-drone-v3: 200 x 200 m, tendidos eléctricos con cables y hasta 6 aves, más viento y batería (DQN)",
+    "DroneRescueGridCity-v4": "grid-drone-v3 (3.0.0): 200 x 200 m, tendidos eléctricos con cables y hasta 6 aves, más viento y batería (DQN)",
+    "DroneRescueGridCityHard-v0": "grid-drone-v3 (3.1.0): la ciudad con postes de 30 m, cables a 20-30 m y aves con zona de peligro (DQN)",
 }
 STORM = "DroneRescueGridStorm-v3"
 CITY = "DroneRescueGridCity-v4"
-STORM_LIKE = (STORM, CITY)
+CITY_HARD = "DroneRescueGridCityHard-v0"
+CITY_LIKE = (CITY, CITY_HARD)
+STORM_LIKE = (STORM, CITY, CITY_HARD)
 DEFAULT_ENV = {"dqn": "DroneRescueGridRandom-v2", "qlearning": "DroneRescueGridDummy-v1"}
 KEYS = {"d": 0, "a": 1, "w": 2, "s": 3, "r": 4, "f": 5}  # +x, -x, +y, -y, subir, bajar
 
@@ -107,9 +110,19 @@ def cmd_rules(args):
     Este mapa: fuerza {e.wind:.2f}, dirección ({e.wind_dir[0]:+.2f}, {e.wind_dir[1]:+.2f}).
   Batería: horizontal {g.ENERGY_H}, subir {g.ENERGY_UP}, bajar {g.ENERGY_DOWN} por celda; contra el viento hasta
     +{g.HEADWIND * g.WIND_MAX:.1f}, a favor hasta -{g.HEADWIND * g.WIND_MAX:.1f}; cada ráfaga +{g.GUST_ENERGY}.
-    Capacidad = mejor ruta x {g.BATTERY_MARGIN[0]} a {g.BATTERY_MARGIN[1]} + {g.BATTERY_RESERVE}. Este mapa: {e.capacity:.1f}.
+    Capacidad = mejor ruta x {e.battery_margin[0] if hasattr(e, "battery_margin") else g.BATTERY_MARGIN[0]} a {e.battery_margin[1] if hasattr(e, "battery_margin") else g.BATTERY_MARGIN[1]} + {g.BATTERY_RESERVE}. Este mapa: {e.capacity:.1f}.
     Sin batería: {g.R_BATTERY:+} y termina. Recompensa por paso: -energía (en vez de {R_STEP:+}).
   Observación (51): las 46 de v2, viento (2), probabilidad de ráfaga a esta altura, batería y margen hasta B""")
+    if env_id == CITY_HARD:
+        import envs.grid_drone_env as g
+        print(f"""  A en {e.start[:2]} (no en la esquina).
+  Tendidos eléctricos largos: {e.n_lines[0]} a {e.n_lines[1]} por mapa que cruzan la ciudad, con postes de {e.pole_top * CELL} m cada
+    {e.pole_spacing[0] * CELL} a {(e.pole_spacing[1] - 1) * CELL} m y el cable entre {e.cable_z[0] * CELL} y {(e.cable_z[1] + 1) * CELL} m (la altura de crucero).
+    Los sensores los ven; se cruzan por encima, por debajo (volando bajo, penalizado) o rodeándolos. Este mapa: {len(e.lines)} tendidos, {len(e.poles)} postes.
+  Aves: {e.n_birds[0]} a {e.n_birds[1]} por mapa, a menos de {g.HARD_BIRD_NEAR_ROUTE * CELL} m de la ruta ideal y entre {g.HARD_BIRD_SPAWN_Z[0] * CELL} y {(g.HARD_BIRD_SPAWN_Z[1] + 1) * CELL} m.
+    Cada una mantiene su rumbo {g.HARD_BIRD_TURN[0]} a {g.HARD_BIRD_TURN[1]} pasos y luego lo cambia al azar; {e.bird_speed} celda por paso. Su zona de peligro es
+    un cubo de {2 * e.bird_radius + 1} celdas de lado: entrar en ella estrella al dron ({g.R_BIRD:+}). Se detecta a {g.CITY_BIRD_SENSE} celdas. Este mapa: {len(e.birds)} aves.
+  Observación (59): las 51 anteriores + distancia a la zona de peligro del ave más cercana por dirección (6), aves cerca (1) y ruta restante (1)""")
     if env_id == CITY:
         import envs.grid_drone_env as g
         print(f"""  Tendidos eléctricos: {g.CITY_POLE_LINES[0]} a {g.CITY_POLE_LINES[1]} por mapa, postes cada {g.CITY_POLE_SPACING[0] * CELL} a {(g.CITY_POLE_SPACING[1] - 1) * CELL} m
@@ -190,10 +203,13 @@ def cmd_run(args):
             })
             line += (f" | viento {env.wind:.2f} | {env.pushes} ráfagas | batería {max(env.battery, 0) / env.capacity:4.0%}"
                      + (" | choque por el viento" if trace[-1].get("cause") == "viento" else ""))
-        if env_id == CITY:
+        if env_id in CITY_LIKE:
+            import envs.grid_drone_env as g
             episode.update({"size": list(env.shape), "poles": [list(c) for c in env.poles], "cables": [list(c) for c in env.cables],
-                            "pole_height": env.poles and __import__("envs.grid_drone_env", fromlist=["x"]).CITY_POLE_HEIGHT,
+                            "pole_height": getattr(env, "pole_top", g.CITY_POLE_HEIGHT),
                             "birds": [[list(b) for b in frame] for frame in env.bird_history]})
+            if env_id == CITY_HARD:  # el visor dibuja la banda del cable y la zona de peligro de cada ave
+                episode.update({"cable_z": list(env.cable_z), "bird_radius": env.bird_radius})
             line += f" | {len(env.lines)} tendidos | {len(env.birds)} aves" + (" | choque con un ave" if trace[-1].get("cause") == "ave" else "")
         episodes.append(episode)
         print(line)

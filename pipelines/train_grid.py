@@ -1,5 +1,8 @@
 """Entrenamiento versionado de un DQN de las familias de cuadrícula grid-drone-v2 y grid-drone-v3.
 
+El ambiente se elige por su identificador (environment.id del perfil): grid-drone-v3 tiene dos versiones,
+3.0.0 (DroneRescueGridCity-v4) y 3.1.0 (DroneRescueGridCityHard-v0).
+
 Mismo contrato que pipelines/train_ppo.py: rechaza código sin commit, registra el run en MLflow
 (parámetros, curvas, artefactos y Model Registry), evalúa el mejor modelo con la suite fija y
 deja el paquete recuperable en artifacts/models/<run_id>/ y el manifiesto en manifests/.
@@ -23,6 +26,7 @@ import mlflow
 import numpy as np
 import torch
 import yaml
+from mlflow import MlflowClient
 from mlflow.models import infer_signature
 
 import envs.grid_drone_env as grid
@@ -34,25 +38,32 @@ from pipelines.train import _json_bytes, _write_manifest
 from pipelines.train_ppo import DEFAULT_MANIFEST_DIR, DEFAULT_PACKAGE_DIR, PROJECT_ROOT, _git, _sha256
 
 ACTIONS = ["+x", "-x", "+y", "-y", "subir", "bajar"]
-FAMILIES = {
-    grid.STORM_FAMILY: {"env_id": "DroneRescueGridStorm-v3", "version": grid.STORM_ENVIRONMENT_VERSION,
-                        "reward_version": grid.STORM_REWARD_VERSION, "n_obs": grid.STORM_N_OBS, "shape": (grid.NX, grid.NY, grid.NZ)},
-    grid.CITY_FAMILY: {"env_id": "DroneRescueGridCity-v4", "version": grid.CITY_ENVIRONMENT_VERSION,
-                       "reward_version": grid.CITY_REWARD_VERSION, "n_obs": grid.CITY_N_OBS, "shape": grid.CITY_SHAPE},
+ENVIRONMENTS = {
+    "DroneRescueGridStorm-v3": {"family": grid.STORM_FAMILY, "version": grid.STORM_ENVIRONMENT_VERSION,
+                                "reward_version": grid.STORM_REWARD_VERSION, "n_obs": grid.STORM_N_OBS, "env": grid.DroneStormEnv},
+    "DroneRescueGridCity-v4": {"family": grid.CITY_FAMILY, "version": grid.CITY_ENVIRONMENT_VERSION,
+                               "reward_version": grid.CITY_REWARD_VERSION, "n_obs": grid.CITY_N_OBS, "env": grid.DroneCityEnv},
+    "DroneRescueGridCityHard-v0": {"family": grid.CITY_FAMILY, "version": grid.CITY_HARD_ENVIRONMENT_VERSION,
+                                   "reward_version": grid.CITY_REWARD_VERSION, "n_obs": grid.CITY_N_OBS, "env": grid.DroneCityHardEnv},
 }
 
 
-def input_contract(family: str = grid.STORM_FAMILY) -> dict:
-    """Contrato de entrada y salida (sección 11 de la guía), en el orden de _obs de cada familia."""
-    spec = FAMILIES[family]
-    scale = "/ " + str(tuple(v - 1 for v in spec["shape"]))
+def input_contract(env_id: str = "DroneRescueGridStorm-v3") -> dict:
+    """Contrato de entrada y salida (sección 11 de la guía), en el orden de _obs de cada ambiente."""
+    spec = ENVIRONMENTS[env_id]
+    env = spec["env"]()
+    scale = "/ " + str(tuple(v - 1 for v in env.shape))
+    hard = isinstance(env, grid.DroneCityHardEnv)
     city = [
-        {"indices": "51:57", "from": "ave más cercana en +x, -x, +y, -y, arriba, abajo", "scale": f"/ {grid.CITY_BIRD_SENSE} celdas; 1 = ninguna"},
+        {"indices": "51:57", "from": ("distancia a la zona de peligro del ave más cercana (radio de %d celda) en +x, -x, +y, -y, arriba, abajo" % env.bird_radius
+                                      if hard else "ave más cercana en +x, -x, +y, -y, arriba, abajo"),
+         "scale": f"/ {grid.CITY_BIRD_SENSE} celdas; 1 = ninguna"},
         {"indices": "57", "from": "aves a 4 celdas o menos", "scale": f"/ {grid.CITY_BIRDS[1]}"},
         {"indices": "58", "from": "distancia restante a B", "scale": "/ distancia inicial"},
-    ] if family == grid.CITY_FAMILY else []
+    ] if spec["family"] == grid.CITY_FAMILY else []
     return {
-        "family": family,
+        "family": spec["family"],
+        "environment_id": env_id,
         "environment_version": spec["version"],
         "observation_dimensions": spec["n_obs"],
         "action_dimensions": len(ACTIONS),
@@ -61,7 +72,7 @@ def input_contract(family: str = grid.STORM_FAMILY) -> dict:
         "features": [
             {"indices": "0:3", "from": "posición (celdas)", "scale": scale},
             {"indices": "3:6", "from": "vector hacia B (celdas)", "scale": scale},
-            {"indices": "6:12", "from": "sensores de distancia +x, -x, +y, -y, arriba, abajo", "scale": f"/ {grid.SENSOR_RANGE} celdas"},
+            {"indices": "6:12", "from": "sensores de distancia +x, -x, +y, -y, arriba, abajo (edificios, postes y cables)", "scale": f"/ {grid.SENSOR_RANGE} celdas"},
             {"indices": "12:39", "from": "ocupación del cubo 3x3x3 alrededor del dron", "scale": "1 = bloqueado"},
             {"indices": "39:46", "from": "visitas a la celda actual y a las 6 vecinas", "scale": "/ 3, máximo 1"},
             {"indices": "46:48", "from": "viento: dirección x fuerza", "scale": f"/ {grid.WIND_MAX}"},
@@ -74,14 +85,45 @@ def input_contract(family: str = grid.STORM_FAMILY) -> dict:
     }
 
 
+def environment_snapshot(env_id: str) -> dict:
+    """Parámetros del ambiente tal como los lee la instancia, para el config.json de cada run."""
+    spec = ENVIRONMENTS[env_id]
+    env = spec["env"]()
+    snap = {"id": env_id, "family": spec["family"], "version": spec["version"], "reward_version": spec["reward_version"],
+            "cell_m": grid.CELL, "size": list(env.shape), "start": list(env.start), "max_steps": env.max_steps,
+            "columns": list(env.n_columns), "goal_min_dist": grid.GOAL_MIN_DIST, "wind_max": env.wind_max,
+            "min_cruise_m": env.min_cruise_z * grid.CELL,
+            "energy": {"horizontal": grid.ENERGY_H, "subir": grid.ENERGY_UP, "bajar": grid.ENERGY_DOWN,
+                       "headwind": grid.HEADWIND, "gust": grid.GUST_ENERGY},
+            "battery_reserve": grid.BATTERY_RESERVE,
+            "rewards": {"goal": grid.R_GOAL, "crash": grid.R_CRASH, "battery": grid.R_BATTERY, "progress": grid.R_PROGRESS, "low": grid.R_LOW}}
+    if isinstance(env, grid.DroneCityHardEnv):
+        snap.update({"battery_margin": list(env.battery_margin), "pole_lines": list(env.n_lines), "pole_spacing": list(env.pole_spacing),
+                     "pole_top_cells": env.pole_top, "cable_z_cells": list(env.cable_z), "long_lines": env.long_lines,
+                     "birds": list(env.n_birds), "bird_mode": env.bird_mode, "bird_radius": env.bird_radius, "bird_speed": env.bird_speed,
+                     "bird_spawn_z": list(grid.HARD_BIRD_SPAWN_Z), "bird_flight_z": list(grid.HARD_BIRD_FLIGHT_Z),
+                     "bird_near_route": grid.HARD_BIRD_NEAR_ROUTE, "bird_turn": list(grid.HARD_BIRD_TURN),
+                     "bird_sense": grid.CITY_BIRD_SENSE, "bird_reward": grid.R_BIRD})
+    elif isinstance(env, grid.DroneCityEnv):
+        snap.update({"battery_margin": list(grid.BATTERY_MARGIN), "pole_lines": list(grid.CITY_POLE_LINES), "pole_spacing": list(grid.CITY_POLE_SPACING),
+                     "pole_height_cells": grid.CITY_POLE_HEIGHT, "birds": list(grid.CITY_BIRDS), "bird_z": list(grid.CITY_BIRD_Z),
+                     "bird_sense": grid.CITY_BIRD_SENSE, "bird_stay": grid.BIRD_STAY, "bird_reward": grid.R_BIRD})
+    else:
+        snap["battery_margin"] = list(grid.BATTERY_MARGIN)
+    return snap
+
+
 def load_profile(path: str | Path) -> tuple[dict, Path]:
     path = Path(path).resolve()
     profile = yaml.safe_load(path.read_text(encoding="utf-8"))
     for key in ("model_family", "experiment", "environment", "training", "evaluation_suite"):
         if not profile.get(key):
             raise ValueError(f"Falta {key} en el perfil")
-    if profile["model_family"] not in FAMILIES:
-        raise ValueError(f"Este pipeline entrena {sorted(FAMILIES)}, no {profile['model_family']}")
+    env_id = profile["environment"].get("id")
+    if env_id not in ENVIRONMENTS:
+        raise ValueError(f"Este pipeline entrena {sorted(ENVIRONMENTS)}, no {env_id}")
+    if profile["model_family"] != ENVIRONMENTS[env_id]["family"]:
+        raise ValueError(f"{env_id} es de la familia {ENVIRONMENTS[env_id]['family']}, no de {profile['model_family']}")
     return profile, path
 
 
@@ -107,10 +149,8 @@ def train_run(profile_path: str | Path, seed: int, *, manifest_dir: str | Path =
         training["steps"] = int(steps_override)
     agent_params = dict(training.get("agent", {}))
     env_id = str(profile["environment"]["id"])
-    family = str(profile["model_family"])
-    spec = FAMILIES[family]
-    if env_id != spec["env_id"]:
-        raise ValueError(f"La familia {family} se entrena en {spec['env_id']}, no en {env_id}")
+    spec = ENVIRONMENTS[env_id]
+    family = spec["family"]
     experiment_id = str(profile["experiment"]["id"])
     suite, suite_path = load_grid_suite(profile["evaluation_suite"])
     if suite["environment"] != env_id:
@@ -148,20 +188,7 @@ def train_run(profile_path: str | Path, seed: int, *, manifest_dir: str | Path =
             snapshot = {
                 "profile": profile,
                 "profile_path": str(profile_file.relative_to(PROJECT_ROOT)) if profile_file.is_relative_to(PROJECT_ROOT) else str(profile_file),
-                "environment": {"id": env_id, "family": family, "version": spec["version"],
-                                "reward_version": spec["reward_version"], "cell_m": grid.CELL, "size": list(spec["shape"]),
-                                "start": list(grid.START), "columns": list(grid.STORM_COLUMNS if family == grid.STORM_FAMILY else grid.CITY_COLUMNS),
-                                "goal_min_dist": grid.GOAL_MIN_DIST,
-                                **({"pole_lines": list(grid.CITY_POLE_LINES), "pole_spacing": list(grid.CITY_POLE_SPACING),
-                                    "pole_height_cells": grid.CITY_POLE_HEIGHT, "birds": list(grid.CITY_BIRDS), "bird_z": list(grid.CITY_BIRD_Z),
-                                    "bird_sense": grid.CITY_BIRD_SENSE, "bird_stay": grid.BIRD_STAY} if family == grid.CITY_FAMILY else {}),
-                                "wind_max": grid.WIND_MAX, "energy": {"horizontal": grid.ENERGY_H, "subir": grid.ENERGY_UP,
-                                                                      "bajar": grid.ENERGY_DOWN, "headwind": grid.HEADWIND,
-                                                                      "gust": grid.GUST_ENERGY},
-                                "battery_margin": list(grid.BATTERY_MARGIN), "battery_reserve": grid.BATTERY_RESERVE,
-                                "rewards": {"goal": grid.R_GOAL, "crash": grid.R_CRASH, "battery": grid.R_BATTERY,
-                                            "progress": grid.R_PROGRESS, "low": grid.R_LOW,
-                                            **({"bird": grid.R_BIRD} if family == grid.CITY_FAMILY else {})}},
+                "environment": environment_snapshot(env_id),
                 "seed": int(seed), "steps": int(training["steps"]), "evaluation_suite_id": suite["evaluation_suite_id"],
             }
             config_bytes = _json_bytes(snapshot)
@@ -201,7 +228,7 @@ def train_run(profile_path: str | Path, seed: int, *, manifest_dir: str | Path =
                 config_artifact = temp / "config.json"
                 config_artifact.write_bytes(config_bytes)
                 normalization_path = temp / "normalization.json"
-                normalization_path.write_bytes(_json_bytes(input_contract(family)))
+                normalization_path.write_bytes(_json_bytes(input_contract(env_id)))
 
                 best = DQNAgent.load(best_path, "cpu")
                 evaluation = evaluate_storm(best, env_id, episodes=int(suite["episodes"]), seed=int(suite["first_seed"]))
@@ -216,7 +243,7 @@ def train_run(profile_path: str | Path, seed: int, *, manifest_dir: str | Path =
                 mlflow.log_metrics({f"final_evaluation/{key}": float(value) for key, value in metrics.items()
                                     if isinstance(value, (int, float)) and value is not None}, step=int(training["steps"]))
 
-                example, _ = (grid.DroneCityEnv() if family == grid.CITY_FAMILY else grid.DroneStormEnv()).reset(seed=int(seed))
+                example, _ = spec["env"]().reset(seed=int(seed))
                 input_example = np.asarray([example], dtype=np.float32)
                 model_info = mlflow.pyfunc.log_model(
                     name="pyfunc_model", python_model=GridDQNPyFuncModel(),
@@ -229,6 +256,8 @@ def train_run(profile_path: str | Path, seed: int, *, manifest_dir: str | Path =
                 registered_name = f"DroneRescueGridDQN-{family}"
                 registered = mlflow.register_model(model_info.model_uri, registered_name)
                 registry_uri = f"models:/{registered_name}/{registered.version}"
+                for key, value in (("environment_id", env_id), ("environment_version", spec["version"]), ("experiment_id", experiment_id)):
+                    MlflowClient().set_model_version_tag(registered_name, str(registered.version), key, value)
 
                 package = Path(package_dir) / run_id
                 if package.exists():

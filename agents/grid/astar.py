@@ -7,6 +7,8 @@ cada paso desde donde quedó el dron.
 """
 import heapq
 
+import numpy as np
+
 from envs.grid_drone_env import ACTIONS, GOAL, R_LOW, R_STEP, START, dist_to_goal
 
 
@@ -70,3 +72,30 @@ class AStarReplanner:
             return 4  # sin ruta: subir es lo menos malo
         step = tuple(b - a for a, b in zip(route[0], route[1]))
         return ACTIONS.index(step)
+
+
+class AwareAStarReplanner(AStarReplanner):
+    """A* que además conoce la posición y el rumbo de todas las aves (DroneCityHardEnv).
+
+    Antes de planear suma un coste alto a las celdas cercanas a cada ave y a donde estará en el
+    paso siguiente, así que rodea sus zonas de peligro. Sabe más que el DQN (que solo detecta las
+    aves en 6 direcciones y a 4 celdas), pero es un planificador sencillo, no una cota de lo que
+    se puede alcanzar: los rodeos le cuestan batería.
+    """
+
+    BIRD_COST = 80.0
+
+    def act(self, obs=None):
+        env = self.env
+        cost = np.zeros(env.shape)
+        radius = env.bird_radius
+        danger = radius + 1 + (env.bird_speed - 1)
+        for bird, (hx, hy) in zip(env.birds, env.bird_headings()):
+            points = [bird]
+            if (hx, hy) != (0, 0):
+                points.append((bird[0] + hx * env.bird_speed, bird[1] + hy * env.bird_speed, bird[2]))
+            for px, py, pz in points:
+                cost[max(0, px - danger):px + danger + 1, max(0, py - danger):py + danger + 1,
+                     max(0, pz - radius - 1):pz + radius + 2] += self.BIRD_COST
+        env._bird_cost = cost
+        return super().act(obs)

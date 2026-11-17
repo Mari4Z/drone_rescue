@@ -9,8 +9,13 @@ grid-city-public (grid-drone-v3):
 - astar_viento: igual, con postes y cables en el mapa; no ve las aves.
 - dqn_storm_v2: el mejor DQN de grid-drone-v2 (run 3b95307e), con sus 51 entradas, sin ver aves.
 
-    python -m pipelines.evaluate_grid_references            # las dos suites
-    python -m pipelines.evaluate_grid_references city       # solo una
+grid-city-hard-public (grid-drone-v3, ambiente 3.1.0):
+- astar_viento: ciego a las aves; ve edificios, postes y cables.
+- astar_consciente: además conoce la posición y el rumbo de todas las aves (no es una cota de lo alcanzable).
+- dqn_city_v4: el mejor DQN de la ciudad 3.0.0 (run 5a8c68f2), sin haberse entrenado con esta dificultad.
+
+    python -m pipelines.evaluate_grid_references            # las tres suites
+    python -m pipelines.evaluate_grid_references hard       # solo una (storm, city o hard)
 """
 
 from __future__ import annotations
@@ -21,7 +26,7 @@ from pathlib import Path
 
 import yaml
 
-from agents.grid.astar import AStarReplanner
+from agents.grid.astar import AStarReplanner, AwareAStarReplanner
 from agents.grid.dqn import DQNAgent
 from agents.grid.evaluate import evaluate_storm
 from pipelines.train import _json_bytes
@@ -30,9 +35,11 @@ from pipelines.train_ppo import PROJECT_ROOT, _sha256
 SUITES = {
     "storm": (PROJECT_ROOT / "configs" / "grid_storm_evaluation_suite.yaml", PROJECT_ROOT / "artifacts" / "results" / "grid_storm_referencias.json"),
     "city": (PROJECT_ROOT / "configs" / "grid_city_evaluation_suite.yaml", PROJECT_ROOT / "artifacts" / "results" / "grid_city_referencias.json"),
+    "hard": (PROJECT_ROOT / "configs" / "grid_city_hard_evaluation_suite.yaml", PROJECT_ROOT / "artifacts" / "results" / "grid_city_hard_referencias.json"),
 }
 V1_RUN = "dd7b29c6bf444d74b072d19e1598e7ab"
 V2_RUN = "3b95307e890245d3b011bfda923b9977"
+CITY_V4_RUN = "5a8c68f2d3a449488475142303fee41b"
 
 
 def _load_dqn(run_id: str) -> DQNAgent:
@@ -50,6 +57,13 @@ def references(name: str) -> list[tuple[str, dict, str]]:
             ("astar", {"make_policy": lambda e: AStarReplanner(e)}, "mapa completo, replanea cada paso, no modela ráfagas"),
             ("astar_viento", {"make_policy": lambda e: AStarReplanner(e, risk_weight=30)}, "además evita edificios a sotavento"),
             ("dqn_memoria_v1", {"policy": lambda obs: old.act(obs[:46])}, f"run {V1_RUN}, solo las 46 entradas de v1"),
+        ]
+    if name == "hard":
+        city = _load_dqn(CITY_V4_RUN)
+        return [
+            ("astar_viento", {"make_policy": lambda e: AStarReplanner(e, risk_weight=30)}, "mapa completo con postes y cables, evita sotavento, no ve aves"),
+            ("astar_consciente", {"make_policy": lambda e: AwareAStarReplanner(e, risk_weight=30)}, "además conoce la posición y el rumbo de todas las aves"),
+            ("dqn_city_v4", {"policy": lambda obs: city.act(obs)}, f"run {CITY_V4_RUN[:8]}: el mejor DQN de la ciudad 3.0.0, sin entrenar con esta dificultad"),
         ]
     storm = _load_dqn(V2_RUN)
     return [
