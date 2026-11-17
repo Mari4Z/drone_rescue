@@ -244,4 +244,54 @@ media de al menos 57 % de éxito (diez puntos más que `dqn_city_v4`), con al me
 sus choques con aves no pasan del 15 % de los mapas en ninguna (frente a 31.8 % y 55.4 %). Queda por debajo
 de `astar_consciente` (87.4 %).
 
-Resultados: se añaden al terminar el entrenamiento.
+**Resultados** (suite `grid-city-hard-public`, 500 mapas, con el mejor checkpoint de cada semilla elegido con la
+validación; 77 a 85 min por semilla con las tres en paralelo, sin suspensiones):
+
+| Política | Éxito | Aves | Viento | Otro choque | Batería | Energía vs. mejor ruta |
+|---|---:|---:|---:|---:|---:|---:|
+| `astar_consciente` (ve las aves) | 87.4 % | 1.8 % | 2.2 % | 0 % | 8.6 % | 1.21× |
+| **`grid-city-hard-dqn` semilla 37** (run `3227a636`, paso 3 000 000) | **70.4 %** | 15.6 % | 12.2 % | 1.2 % | 0.6 % | 1.22× |
+| `grid-city-hard-dqn` semilla 11 (run `b82d0afc`, paso 3 000 000) | 68.2 % | 16.4 % | 13.2 % | 0.6 % | 1.6 % | 1.24× |
+| `grid-city-hard-dqn` semilla 23 (run `62bc7177`, paso 2 100 000) | 65.2 % | 19.0 % | 13.6 % | 0.8 % | 1.4 % | 1.19× |
+| **Media de las 3 semillas** | **67.9 %** | **17.0 %** | 13.0 % | 0.9 % | 1.2 % | 1.22× |
+| `dqn_city_v4` (el DQN de 3.0.0, sin entrenar aquí) | 47.4 % | 31.8 % | 18.4 % | 1.4 % | 1.0 % | 1.22× |
+| `astar_viento` (ciego a las aves) | 42.8 % | 55.4 % | 1.4 % | 0 % | 0.4 % | 1.13× |
+
+**Decisión: la hipótesis se cumple a medias.**
+
+- **Se cumple el éxito.** La media es 67.9 % (el umbral era 57 %), la peor semilla, 65.2 %, supera el 50 %, y todas
+  quedan por debajo de `astar_consciente` (87.4 %).
+- **No se cumple el tope de aves.** Ninguna semilla baja del 15 %: 15.6 %, 16.4 % y 19.0 %. La semilla 37 se
+  queda a 0.6 puntos, dentro del error de muestreo de 500 mapas (unos ±3 puntos al 95 %); la 23 está a 4. El 15 %
+  era una meta, no una cota calculada: no había referencia de lo que puede lograr un DQN con esta observación.
+
+Hallazgos:
+
+1. **Las aves siguen siendo el fallo principal, pero a la mitad.** 17.0 % de media frente a 31.8 % de
+   `dqn_city_v4` y 55.4 % del A\* ciego. El A\* consciente llega a 1.8 % porque conoce la posición y el rumbo de
+   todas. El DQN percibe, en cada una de las 6 direcciones de movimiento, la distancia a la zona de peligro hasta
+   4 celdas (20 m), más cuántas aves hay cerca: no ve su rumbo y no tiene memoria, así que no puede anticipar
+   hacia dónde van. Es la explicación probable del hueco con el A\* consciente; no se ha comprobado.
+2. **Los obstáculos fijos no son el problema.** Los choques que el dron provoca con su propio movimiento contra
+   edificios, postes o cables son del 0.6 al 1.2 % (columna "Otro choque"). Un choque cuenta como "viento" cuando
+   una ráfaga empuja al dron a una celda ocupada (edificio, poste, cable o borde del mapa); la tabla no separa
+   esos casos.
+3. **El viento es el segundo fallo** (12.2 a 13.6 %; A\* consciente, 2.2 %). Bajó respecto a 3.0.0: `dqn_city_v4`
+   pasa de 30.2 % en su suite a 18.4 % en esta, y el entrenamiento aquí lo deja en 13 %. No es una comparación
+   aislada, porque además del punto A cambian la suite y los obstáculos.
+4. **Estabilidad.** No hubo una caída definitiva como la de la semilla 11 de `grid-city-dqn` (0 % desde el paso
+   2 600 000). Pero las semillas 11 y 37 tuvieron un corte casi en cero en el mismo paso, 1 650 000 (8 % y 0 % de
+   validación), y se recuperaron en el siguiente (60 % y 37 %); la causa no se investigó. De 1 800 000 en
+   adelante la validación de cada semilla oscila entre 37 y 67 % (con 100 mapas, parte es ruido de muestreo). Las
+   semillas 11 y 37 lograron su mejor validación en el último corte (65 % y 67 %); la 23, en 2 100 000 (60 %; terminó
+   en 54 %). Por eso se mantiene guardar el mejor checkpoint por validación. Las cifras de la suite quedan 3 a 5
+   puntos por encima de la validación del mismo checkpoint (65 → 68.2 %, 60 → 65.2 %, 67 → 70.4 %): la suite no
+   interviene en la elección y no hay señal de que la selección infle el resultado.
+
+Visor: `python cli.py run --env DroneRescueGridCityHard-v0 --model artifacts/models/3227a6362b1547488bb844691b96be7a/model.pt --seed 800000 --maps 12 --web --web-out drone_view_city_hard.html`
+(copia en `artifacts/results/drone_view_city_hard.html`). En esos 12 mapas llega a la meta en 11 y choca con un ave en
+el 11 (semilla 800010). Dibuja los dos cables de cada tendido y la zona de peligro de cada ave.
+
+Lo que sigue (no se hizo): darle al DQN el rumbo de las aves o algo de memoria atacaría el hallazgo 1, pero cambia
+las dimensiones de la observación y por la regla de `docs/versionamiento.md` exige una familia nueva
+(`grid-drone-v4`), no una versión del ambiente.
