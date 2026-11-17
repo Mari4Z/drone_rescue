@@ -88,7 +88,7 @@ def cmd_rules(args):
     v2 = hasattr(e, "random_map")
     print(f"""Entorno {env_id}: {ENVS[env_id]}
   Mapa: {e.shape[0] * CELL if hasattr(e, "shape") else NX * CELL} x {e.shape[1] * CELL if hasattr(e, "shape") else NY * CELL} x {NZ * CELL} m, celdas de {CELL} m
-  A (inicio): {START}   B (meta): {GOAL}
+  A (inicio): {tuple(getattr(e, "start", START))}   B (meta): {tuple(getattr(e, "goal", GOAL))}
   Columnas: {len(e.columns)}{' (aleatorias en cada intento; ejemplo:)' if v2 and e.random_map else ''}
     {e.columns}
   Acciones: 0 +x | 1 -x | 2 +y | 3 -y | 4 subir | 5 bajar

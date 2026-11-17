@@ -101,6 +101,7 @@ def test_health_and_version(api_client):
     assert version.status_code == 200
     assert version.json()["api_version"] == api.API_VERSION
     assert version.json()["environment_version"] == api.ENVIRONMENT_VERSION
+    assert version.json()["git_commit"] == api.SERVED_COMMIT  # fijado al arrancar, no el HEAD de cada petición
     assert version.json()["served_model"] is None
 
 

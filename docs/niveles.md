@@ -16,7 +16,10 @@ Por ello, la Q-table puede cargarse estructuralmente entre estos escenarios, aun
 la política aprendida puede rendir distinto por el cambio de dinámica. Si una
 versión futura cambia dimensiones, orden o significado de observaciones/acciones,
 debe declararse una familia nueva y no se deben reutilizar directamente esos
-modelos.
+modelos. Los agentes PPO usan `drone-rescue-v3` sobre estos mismos niveles: la
+física, la observación y la recompensa son las mismas y cambian las acciones (11
+órdenes: velocidades objetivo y sostener posición, ver la
+[ficha del ambiente](ficha_ambiente.md)), por eso es otra familia.
 
 ## Progresión de niveles
 

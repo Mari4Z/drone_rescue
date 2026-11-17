@@ -1,59 +1,68 @@
-# Auditoría de alcance frente a los requisitos del proyecto
+# Auditoría frente a la guía del proyecto
 
-## Alcance de esta auditoría
+Revisión del 17 de noviembre de 2026 sobre el commit `715894d` y los cambios de esta documentación. Contrasta el repositorio con la sección 17 de la guía («Entregables y criterios de aceptación»), con las comprobaciones obligatorias de la sección 16 y con la lista de lo que debe poder revisarse en el repositorio. Reemplaza la auditoría anterior, que se escribió sin el PDF de requisitos y quedó desactualizada.
 
-El repositorio no contiene el PDF de requisitos en ninguna de sus ramas
-revisadas. Por ello, este reporte contrasta el código visible y el producto
-final descrito en la solicitud; no puede afirmar cumplimiento literal del PDF.
+Estados: **Cumple**, **Parcial** (existe, pero con una limitación que se explica) y **Abierto** (falta o depende de una decisión del equipo).
 
-## Existía en la rama `1Experiment`
+## Lo que pide la lista de revisión del repositorio
 
-- Entorno Gymnasium de posición discreta, agente tabular Q-learning y entrenamiento.
-- Visualización textual y generación de una imagen 3D estática.
-- La dinámica del entorno se mantuvo sin cambios en esta adecuación.
+| Requisito | Estado | Evidencia | Qué falta o limita |
+|---|---|---|---|
+| README con misión, arquitectura, instalación, ejecución, reproducción y variables | Cumple | [README.md](../README.md) | Las instrucciones de Windows y Linux no se volvieron a probar con las dependencias actuales (todo se entrenó en macOS) |
+| Ficha del ambiente | Cumple | [ficha_ambiente.md](ficha_ambiente.md) (incluye `drone-rescue-v3`) | — |
+| Tres niveles de dificultad | Cumple | [niveles.md](niveles.md), `configs/levels/` | — |
+| Al menos cuatro configuraciones con hipótesis, runs y estados | Cumple | 19 perfiles y configuraciones con `hypothesis`; exp-001 a exp-004 cambian una dimensión cada uno; runs en MLflow | Todos los runs figuran `FINISHED`: los rechazos quedan como decisión (`selection_decision`, [decision.md](decision.md), [pipeline.md](pipeline.md)), no como estado del run |
+| Evaluaciones por caso | Cumple | `evaluacion.json` de cada paquete: casos × episodios con causa, batería, latencia y retorno. La del modelo oficial se reproduce con `scripts/reproduce_evaluation.py` | — |
+| Modelos recuperables con manifiestos, normalización, hashes y dependencias | Cumple | [versionamiento.md](versionamiento.md); 41 manifiestos (`git_dirty` es falso en los 23 que lo registran); release `modelos-20261117`; `requirements.txt` fijado | `requirements_sha256` y `git_dirty` solo están en los 23 manifiestos recientes; 5 manifiestos históricos no son reproducibles y están marcados como tales |
+| Pipeline documentado | Cumple | [pipeline.md](pipeline.md): 8 etapas, criterios, 5 corridas reales | — |
+| Prueba de rollback documentada | Cumple | [pipeline.md](pipeline.md): v0003 restaura v0001 y la API sirve su SHA-256 | — |
+| Incidente de degradación e intervención | Parcial | [informe.md](informe.md), sección 5: antes 99.2 %, degradación a 0.0 %, intervención, después 55.2 a 61.8 %, decisión | Ocurre en la cuadrícula, no en la misión principal; en N3 solo se observa la degradación (0 %) sin una intervención que la resuelva |
+| Informe breve de decisiones, resultados, límites y contribuciones | Parcial | [informe.md](informe.md) | Las contribuciones se derivan del historial de Git: el equipo debe revisarlas y completarlas antes de entregar |
+| Servicios disponibles y cómo acceder sin pasar contraseñas | Parcial | README (acceso para la revisión) y [despliegue.md](despliegue.md) | La API corre en un equipo del grupo con ngrok y solo existe mientras esté encendido. La demostración no exige clave (decisión abierta) |
 
-## Preparado en esta adecuación
+## Entregables de la sección 17
 
-- Paquetes `envs/` y `agents/` como imports canónicos; `env/` y `agent/`
-  conservan imports compatibles.
-- Directorios `configs/`, `pipelines/`, `tests/`, `web/`, `manifests/` y
-  `docs/` creados.
-- Plantilla de manifiesto con pesos, SHA-256, normalización, versión del
-  entorno, configuración resuelta, semillas, métricas, commit y run_id.
-- Dependencia MLflow fijada y backend SQLite local de desarrollo configurado;
-  la validación de esta adecuación queda registrada como un run.
-- Contrato de misión y dinámica continua en la ficha del ambiente; parámetros de
-  simulación y recompensa en YAML.
-- DVC inicializado con ubicaciones versionadas para Q-tables, suites y
-  resultados. Aún no hay artefactos grandes ni remoto DVC configurado.
-- Entrenamiento `pipelines/train.py` con perfiles N1–N3, runs MLflow, curvas de
-  entrenamiento y evaluación separadas, checkpoints `.npy`, snapshots, manifiestos,
-  reanudación por run padre y registro de Q-tables en Model Registry.
-- Evaluación reproducible desde manifiesto con verificación SHA-256 de checkpoint
-  y snapshot; una prueba repite los resultados deterministas por semilla.
-- Variables locales de ejemplo sin secretos y reglas de exclusión de archivos
-  temporales, entornos virtuales, frontend y salidas de entrenamiento.
+| Entregable | Estado | Evidencia |
+|---|---|---|
+| URL de Vercel y repositorio con release o tag identificable | Parcial | Vercel responde. Los tags `modelos-*` son pre-releases («no es una entrega»); falta un tag final sobre el código definitivo |
+| README con instalación, ejecución, variables, arquitectura y reproducción | Cumple | [README.md](../README.md) |
+| Ficha del ambiente y tres niveles | Cumple | Ver arriba |
+| Cuatro configuraciones con hipótesis y sus runs y estados en MLflow | Cumple | Ver arriba |
+| Modelos finales recuperables, normalización, manifiestos y referencias de artefactos | Cumple | Release de GitHub, DVC en DagsHub y Hugging Face (solo el oficial) |
+| Evaluaciones por caso, comparación de finalistas y presupuesto utilizado | Cumple | [decision.md](decision.md) (finalistas de Q-learning), [informe.md](informe.md) (resultados y presupuesto por run) |
+| Pipeline, evidencia de degradación e intervención y prueba de rollback | Cumple | [pipeline.md](pipeline.md), [informe.md](informe.md), `artifacts/results/pipeline/` |
+| Informe breve y presentación final | Parcial | El informe está; la presentación no es parte del repositorio |
 
-## Registro de validación de esta adecuación
+## Comprobaciones obligatorias de la sección 16
 
-- Hipótesis: `envs/` y `agents/` pueden ser los imports canónicos manteniendo
-  compatibles los imports antiguos y el comportamiento del entorno.
-- MLflow `run_id`: `96565e7e6915424c9a6744c7acacdce8`.
-- Evidencia: 4 pruebas aprobadas, 0 fallidas y `dvc status` limpio.
-- Este run registra la validación estructural; no representa un entrenamiento.
+| Comprobación | Estado | Cómo se comprobó |
+|---|---|---|
+| La URL abre | Cumple | HTTP 200 el 17 de noviembre de 2026 |
+| La API usa HTTPS y admite el origen del frontend (CORS) | Cumple | La API pública respondió con `access-control-allow-origin` para el origen de Vercel |
+| Las rutas de producción no apuntan a localhost | Cumple | `web/src/api.ts` rechaza `localhost` y las URL sin HTTPS en producción |
+| Los modelos y escenarios se recuperan sin depender de carpetas personales | Parcial | Release y DVC los recuperan, pero la API y la web locales necesitan además la base de MLflow (351 MB), que la release no incluye |
+| Se puede evaluar un modelo antiguo y el recomendado | Parcial | La API carga y evalúa por `run_id`; este punto no se volvió a ejecutar desde la web en esta revisión |
+| Un error de servicio se muestra como error; un replay se identifica como replay | Sin verificar | Comportamiento de la interfaz; no se revisó en esta auditoría |
+| La release y el deployment identifican el código entregado | Parcial | La web publicada es el código de `web/` (bundle idéntico al construido en local). `GET /version` da el commit de la API y coincide con el tag `modelos-20261117`; desde ahora se fija al arrancar. Falta un tag de entrega final |
+| El docente no debe instalar un servidor | Cumple | La web y la API se abren por URL |
+| Backend y registro disponibles durante la revisión | Abierto | Depende de un equipo encendido ([despliegue.md](despliegue.md)) |
 
-## Pendiente para el producto final descrito
+## Qué se comprobó y cómo
 
-- API FastAPI y contrato entre la API y la interfaz.
-- Web Vite/TypeScript/Three.js y despliegue Vercel; la animación todavía no
-  consume estado real del entorno.
-- Probar entrenamiento prolongado para medir convergencia y ajustar presupuestos
-  por nivel; las pruebas de esta adecuación usan pocos episodios y no demuestran
-  aprendizaje exitoso.
-- Configurar servidor/registry remoto y alias de producción; el backend actual es
-  MLflow local con SQLite.
-- Prefect para orquestar el pipeline.
-- Prueba automatizada de rollback de modelo.
-- Remoto DVC compartido y reglas para suites/resultados concretos.
-- Comparación requisito por requisito con el PDF oficial, cuando se incorpore
-  al repositorio o se indique su ubicación.
+| Comprobación | Resultado |
+|---|---|
+| `python -m pytest` | 124 pruebas aprobadas |
+| `python scripts/verify_packages.py` en una copia limpia con la release descargada de GitHub | 97 archivos, 0 problemas |
+| `python scripts/reproduce_evaluation.py` (modelo oficial) | N1 100 %, N2 0 %, N3 0 %; 30 de 30 episodios idénticos a los registrados |
+| Copia limpia con solo la release: `GET /health`, `GET /catalog`, `POST /load` | `/health` responde; `/catalog` vacío y `/load` falla por falta de la base de MLflow |
+| `GET /health`, `GET /version` y `GET /catalog` de la API pública | Responden sin clave; `/version` mostraba el commit `715894d` |
+| Construir `web/` con la `VITE_API_BASE_URL` de producción y comparar con el bundle que sirve Vercel | Mismo archivo con hash (`assets/index-CjrhFWLv.js`): lo publicado es el código de `web/` del repositorio |
+
+## Pendiente o decisión del equipo
+
+1. **API sin clave.** Hoy cualquiera con la URL puede usarla, incluido lanzar entrenamientos de hasta 100 000 pasos. Decidir si se activa `DRONE_RESCUE_API_TOKEN` y se entrega por el canal del curso ([despliegue.md](despliegue.md)).
+2. **Tag de entrega.** Crear un tag final sobre el commit definitivo y reiniciar la API para que `/version` muestre ese commit.
+3. **La release no trae MLflow.** Para que la revisión local funcione sin cuenta de DagsHub, incluir una base de MLflow reducida en la release o hacer que la API cargue los modelos desde `manifests/` y `artifacts/models/` cuando no encuentre el run.
+4. **Test final reservado.** No existe; está declarado como límite ([informe.md](informe.md), sección 7).
+5. **Contribuciones.** Revisar la sección 8 del informe: se derivó del historial de Git y no refleja el trabajo no versionado.
+6. **Licencia del repositorio.** No hay `LICENSE`; el README declara que es material académico.

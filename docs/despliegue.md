@@ -1,6 +1,33 @@
 # Despliegue compartido
 
-## Arquitectura preparada
+## Despliegue en uso (demostración y revisión)
+
+| Pieza | Dónde | Cómo se comprueba |
+|---|---|---|
+| Web | Vercel ([drone-rescue-snowy.vercel.app](https://drone-rescue-snowy.vercel.app)), con `web/` como Root Directory y `VITE_API_BASE_URL` apuntando a la API | Abre y muestra el catálogo; si la API no responde, muestra «API no disponible» |
+| API | FastAPI en un equipo del grupo, publicada por HTTPS con ngrok mediante [`scripts/serve_public.sh`](../scripts/serve_public.sh) | `GET /health` (estado) y `GET /version` (commit del código y modelo servido) |
+| Experimentos y datos | MLflow local (`artifacts/mlflow/mlflow.db`) en el equipo de la API; copia compartida en DagsHub (MLflow y DVC) | [versionamiento.md](versionamiento.md) |
+| Modelos sin cuenta | Release de GitHub (todos los modelos) y Hugging Face (solo el oficial) | `SHA256SUMS` y `scripts/verify_packages.py` |
+
+La API solo existe mientras ese equipo esté encendido, sin suspensión y con `serve_public.sh` en marcha. No hay un servidor permanente.
+
+**Antes de una revisión**
+
+1. Equipo enchufado y con la suspensión desactivada. Desde la raíz del proyecto: `./scripts/serve_public.sh` (requiere haber ejecutado una vez `ngrok config add-authtoken <token>`).
+2. Comprobar `GET /health` (`{"status":"ok",...}`) y `GET /version` (el `git_commit` debe ser el del tag que se entrega) en la URL pública de la API, abrir la web y cargar un modelo.
+3. En Vercel, comprobar que la rama de producción es `main` y que `VITE_API_BASE_URL` es la URL HTTPS vigente de la API. Sin acceso al panel: construir `web/` con esa misma variable (`npm run build -- --outDir /tmp/web --emptyOutDir`) y comparar el nombre `assets/index-*.js` con el de la web publicada; si coinciden, el código es el mismo.
+4. Si cambió el código, reiniciar la API: `/version` lee el commit al arrancar.
+
+**Acceso sin compartir contraseñas**
+
+- La demostración corre en modo `development` y **no exige clave**: cualquiera con la URL de la API puede usarla, incluido lanzar entrenamientos, limitados por `DRONE_RESCUE_TRAINING_MAX_TIMESTEPS` (100 000 pasos en `serve_public.sh`). Está pensada solo para demostraciones.
+- Para exigir clave: `DRONE_RESCUE_API_TOKEN=<cadena larga> ./scripts/serve_public.sh`. Con la variable definida, la API pide `X-API-Key` en todo salvo `/health` y `/version`, y la clave se escribe en el campo de la web (se guarda solo en `sessionStorage`). La clave se entrega por el canal del curso, nunca por correo ni en el repositorio.
+- DagsHub (MLflow y DVC) exige una cuenta gratuita incluso para leer. Cada persona usa su propia cuenta y su propio token, que solo queda en `.dvc/config.local`. Sin cuenta, los modelos se recuperan de la release de GitHub o de Hugging Face.
+- **Si la API no está disponible**, sin cuenta se pueden verificar y reproducir los modelos desde la release (`scripts/verify_packages.py` y `scripts/reproduce_evaluation.py`, ver el [README](../README.md)). Levantar la web y la API en el equipo de quien revisa necesita además los runs de MLflow (`dvc pull artifacts/mlflow`, con cuenta de DagsHub): la release no incluye la base de MLflow y, sin ella, el catálogo queda vacío y `POST /load` falla (probado con una copia limpia y solo la release).
+
+## Arquitectura preparada (Render y DagsHub)
+
+En uso: DagsHub como remoto DVC y servidor MLflow (`scripts/setup_dagshub.sh`). No desplegado: Render; `render.yaml` queda preparado.
 
 - La web Vite se publica como sitio estático en Vercel, con `web/` como Root
   Directory y `VITE_API_BASE_URL` como variable pública con la URL HTTPS de la
@@ -93,6 +120,6 @@ entrenamiento en memoria tampoco sobreviven a suspensión/reinicio. Para uptime
 continuo o trabajos largos se necesita un plan/worker permanente y una
 instancia de almacenamiento apropiada.
 
-El despliegue no queda activo hasta crear las cuentas/repositorios y cargar los
-secretos en sus respectivos paneles. No publiques una URL de API sin cambiar
-la clave de ejemplo y verificar CORS y autenticación.
+Render no se ha desplegado: su Blueprint requiere crear la cuenta y cargar los
+secretos en el panel. Si se usa, no publiques una URL de API sin cambiar la
+clave de ejemplo y verificar CORS y autenticación.

@@ -316,6 +316,10 @@ def _served_commit() -> str | None:
         return None
 
 
+# Se fija al arrancar: identifica el código que se cargó, no el HEAD que tenga el árbol más tarde.
+SERVED_COMMIT = _served_commit()
+
+
 def _supported_mode(mode: str) -> None:
     if mode == "entrenamiento":
         raise HTTPException(status_code=409, detail="El modo entrenamiento inicia un trabajo con POST /training")
@@ -563,7 +567,7 @@ def _create_app(
                     "level": active.manifest.get("level_id"),
                 }
         return {"api_version": API_VERSION, "environment_version": ENVIRONMENT_VERSION,
-                "git_commit": _served_commit(), "served_model": served}
+                "git_commit": SERVED_COMMIT, "served_model": served}
 
     @application.get("/recommended")
     def recommended():

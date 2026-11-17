@@ -1,5 +1,7 @@
 # Decisión de comparación de finalistas
 
+> Decisión histórica sobre los finalistas de Q-learning (5 de noviembre). La decisión vigente, que deja a `ppo-v3c-n1` como modelo oficial de N1, está en [pipeline.md](pipeline.md) y en [informe.md](informe.md).
+
 - Comparación: `finalistas-20261105T151229Z`
 - Suite común: `drone-rescue-finalists-public` v`1.0.0` (10 episodios por configuración).
 - Presupuesto final: 5000 episodios por run; semillas independientes emparejadas: 11, 23, 37.
