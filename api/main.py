@@ -12,7 +12,7 @@ import tempfile
 import time
 import uuid
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from threading import RLock, Thread
 from typing import Literal
 from urllib.parse import urlparse
@@ -45,6 +45,10 @@ from pipelines.train_ppo import train_run as train_ppo_run
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_DIR = Path(os.getenv("DRONE_RESCUE_MANIFEST_DIR", PROJECT_ROOT / "manifests")).resolve()
+# Los paquetes de modelos (package_path de cada manifiesto) cuelgan de esta raíz. Con ellos la API sirve los modelos
+# de la release aunque la base de MLflow no tenga el run (revisión en otro equipo, sin la base original).
+PACKAGE_ROOT = Path(os.getenv("DRONE_RESCUE_PACKAGE_ROOT", PROJECT_ROOT)).resolve()
+EVALUATION_EXPERIMENT = "drone-rescue-api-evaluations"  # destino de /evaluate cuando MLflow no tiene el run original
 EVALUATION_SUITE_PATH = Path(
     os.getenv("DRONE_RESCUE_EVALUATION_SUITE", PROJECT_ROOT / "configs" / "finalist_evaluation_suite.yaml")
 ).resolve()
@@ -170,6 +174,57 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _local_artifact(manifest: dict, uri: str | None) -> Path | None:
+    """El archivo del paquete local que equivale a un artefacto de MLflow: mismo nombre dentro de package_path.
+
+    Sirve para cargar y listar un modelo con solo el manifiesto y el paquete de la release. La integridad no depende
+    de esta ruta: el llamador comprueba el SHA-256 del manifiesto sobre el archivo que se use.
+    """
+    package_path = manifest.get("package_path")
+    if not uri or not package_path:
+        return None
+    candidate = PACKAGE_ROOT / str(package_path) / PurePosixPath(uri).name
+    return candidate if candidate.is_file() else None
+
+
+def _local_checkpoint(manifest: dict) -> Path | None:
+    """El archivo de pesos del run en esta copia: dentro de su paquete o, para las Q-tables, en artifacts/q_tables/."""
+    uri = manifest.get("model_uri")
+    if not uri:
+        return None
+    package_file = _local_artifact(manifest, uri)
+    if package_file is not None:
+        return package_file
+    q_table = PACKAGE_ROOT / "artifacts" / "q_tables" / PurePosixPath(uri).name
+    return q_table if q_table.is_file() else None
+
+
+def _experiment_hypotheses() -> dict[str, str]:
+    """La hipótesis de cada experimento, leída de los perfiles y experimentos versionados en configs/."""
+    index: dict[str, str] = {}
+    for pattern in ("training/*.yaml", "experiments/*.yaml"):
+        for path in sorted((PROJECT_ROOT / "configs").glob(pattern)):
+            try:
+                document = yaml.safe_load(path.read_text(encoding="utf-8"))
+            except (OSError, yaml.YAMLError):
+                continue
+            experiment = document.get("experiment") if isinstance(document, dict) else None
+            if isinstance(experiment, dict) and experiment.get("id") and experiment.get("hypothesis"):
+                index.setdefault(str(experiment["id"]), str(experiment["hypothesis"]))
+    return index
+
+
+def _artifact_file(manifest: dict, uri: str) -> Path:
+    """Descarga el artefacto de MLflow; si MLflow no lo tiene, usa el archivo equivalente del paquete local."""
+    try:
+        return Path(mlflow.artifacts.download_artifacts(artifact_uri=uri))
+    except (MlflowException, FileNotFoundError, OSError):
+        local = _local_artifact(manifest, uri)
+        if local is None:
+            raise
+        return local
+
+
 def _read_manifest(run_id: str) -> dict:
     tracking_uri = mlflow.get_tracking_uri()
     if tracking_uri.startswith(("http://", "https://")):
@@ -237,9 +292,12 @@ def _verified_artifact(manifest: dict, uri_field: str, hash_field: str, director
     if not uri or not expected_hash:
         raise HTTPException(status_code=422, detail=f"El manifiesto no contiene {uri_field} y {hash_field}")
     try:
-        downloaded = Path(mlflow.artifacts.download_artifacts(artifact_uri=uri))
+        downloaded = _artifact_file(manifest, uri)
     except (MlflowException, FileNotFoundError, OSError) as error:
-        raise HTTPException(status_code=502, detail=f"No se pudo descargar {uri_field} desde MLflow: {error}") from error
+        raise HTTPException(
+            status_code=502,
+            detail=f"No se pudo descargar {uri_field} desde MLflow ni hay un paquete local con ese archivo: {error}",
+        ) from error
     if not downloaded.is_file():
         raise HTTPException(status_code=502, detail=f"MLflow no devolvió un archivo para {uri_field}")
     actual_hash = _sha256(downloaded)
@@ -450,7 +508,7 @@ def _catalog_artifacts(run_id: str, manifest: dict, baseline_config: dict) -> di
     config_uri = manifest.get("config_uri")
     if config_uri:
         try:
-            config_path = Path(mlflow.artifacts.download_artifacts(artifact_uri=config_uri))
+            config_path = _artifact_file(manifest, config_uri)
             if manifest.get("config_sha256") and _sha256(config_path) != manifest["config_sha256"]:
                 raise ValueError("SHA-256 de config.json no coincide con el manifiesto")
             config_document = json.loads(config_path.read_text(encoding="utf-8"))
@@ -470,7 +528,7 @@ def _catalog_artifacts(run_id: str, manifest: dict, baseline_config: dict) -> di
                 "evaluation_uri",
                 f"runs:/{run_id}/evaluation/evaluacion.json",
             )
-            evaluation_path = Path(mlflow.artifacts.download_artifacts(artifact_uri=evaluation_uri))
+            evaluation_path = _artifact_file(manifest, evaluation_uri)
             if manifest.get("evaluation_sha256") and _sha256(evaluation_path) != manifest["evaluation_sha256"]:
                 raise ValueError("SHA-256 de evaluacion.json no coincide con el manifiesto")
             evaluation = json.loads(evaluation_path.read_text(encoding="utf-8"))
@@ -491,6 +549,76 @@ def _optional_int(value) -> int | None:
         return int(value) if value is not None else None
     except (TypeError, ValueError):
         return None
+
+
+def _manifest_catalog_entry(
+    run_id: str, manifest: dict, baseline_config: dict, tracking_uri: str, hypotheses: dict[str, str],
+) -> dict:
+    """Entrada del catálogo de un run que MLflow no tiene: se arma con su manifiesto y el paquete local de la release."""
+    details = _catalog_artifacts(run_id, manifest, baseline_config)
+    family = manifest.get("model_family") or "drone-rescue-v2"
+    produced = bool(manifest.get("model_sha256"))
+    has_checkpoint = produced and _local_checkpoint(manifest) is not None
+    loadable = all(
+        _local_artifact(manifest, manifest.get(f"{name}_uri")) is not None
+        for name in ("model", "config", "normalization")
+    )
+    hypothesis = None
+    config_file = _local_artifact(manifest, manifest.get("config_uri"))
+    if config_file is not None:
+        try:
+            profile = json.loads(config_file.read_text(encoding="utf-8")).get("profile")
+            hypothesis = profile.get("experiment", {}).get("hypothesis") if isinstance(profile, dict) else None
+        except (OSError, json.JSONDecodeError, AttributeError):
+            hypothesis = None
+    # los manifiestos de Q-learning guardan el id del experimento en level_id
+    hypothesis = hypothesis or hypotheses.get(str(manifest.get("experiment_id") or manifest.get("level_id")))
+    metrics: dict[str, float] = {}
+    evaluation_file = _local_artifact(
+        manifest, manifest.get("evaluation_uri") or f"runs:/{run_id}/evaluation/evaluacion.json"
+    )
+    if evaluation_file is not None:
+        try:
+            for case in json.loads(evaluation_file.read_text(encoding="utf-8")).get("cases", []):
+                for metric, value in case.get("metrics", {}).items():
+                    if isinstance(value, (int, float)) and np.isfinite(value):
+                        metrics[f"final_evaluation/{case.get('case_id')}/{metric}"] = float(value)
+        except (OSError, json.JSONDecodeError, AttributeError):
+            metrics = {}
+    return {
+        "run_id": run_id,
+        "status": "FINISHED" if produced else "FAILED",
+        "checkpoint_status": "disponible" if has_checkpoint else "sin checkpoint disponible",
+        "hypothesis": hypothesis,
+        "commit": manifest.get("git_commit"),
+        "level": manifest.get("level_id"),
+        "experiment_id": manifest.get("experiment_id") or manifest.get("level_id"),
+        "mlflow_experiment": None,
+        "environment_version": manifest.get("environment_version"),
+        "seed": manifest.get("seed"),
+        "training_episodes": None,
+        "training_timesteps": _optional_int(manifest.get("effective_timesteps")),
+        "algorithm": manifest.get("algorithm") or "q_learning",
+        "model_family": family,
+        "mean_steps": details["mean_steps"],
+        "duration_seconds": manifest.get("training_duration_s"),
+        "model_version": manifest.get("registry_version"),
+        "model_available": bool(
+            produced and loadable and manifest.get("provenance") != "historico" and family in PPO_FAMILIES
+        ),
+        "changed_dimension": details["changed_dimension"],
+        "changes_vs_baseline": details["changes_vs_baseline"],
+        "config_error": details["config_error"],
+        "evaluation_error": details["evaluation_error"],
+        "metrics": metrics,
+        "experiment": manifest.get("experiment_id"),
+        "manifest_available": True,
+        "model_sha256": manifest.get("model_sha256"),
+        "registry_uri": manifest.get("registry_uri"),
+        "mlflow_link": None,
+        "mlflow_tracking_uri": tracking_uri,
+        "mlflow_run_uri": None,
+    }
 
 
 def _create_app(
@@ -668,6 +796,14 @@ def _create_app(
                         break
         except MlflowException as error:
             raise HTTPException(status_code=503, detail=f"No se pudo consultar MLflow: {error}") from error
+        # Runs que tienen manifiesto pero MLflow no conoce (p. ej. la release descargada en otro equipo, sin la base
+        # original): se listan con lo que traen el manifiesto y el paquete local.
+        listed = {entry["run_id"] for entry in entries}
+        missing = {run_id: manifest for run_id, manifest in manifests.items() if run_id not in listed}
+        if missing:
+            hypotheses = _experiment_hypotheses()
+            for run_id, manifest in missing.items():
+                entries.append(_manifest_catalog_entry(run_id, manifest, baseline_config, tracking_uri, hypotheses))
         return {"runs": entries}
 
     @application.post("/session")
@@ -867,9 +1003,18 @@ def _create_app(
                 raise HTTPException(status_code=422, detail=f"No se pudo ejecutar la evaluación: {error}") from error
             parent_run_id = str(manifest.get("remote_run_id") or manifest["run_id"])
             try:
-                parent = MlflowClient().get_run(parent_run_id)
+                client = MlflowClient()
+                try:
+                    experiment_id = client.get_run(parent_run_id).info.experiment_id
+                except MlflowException:
+                    # MLflow no tiene el run original (release descargada en otro equipo): la evaluación se guarda
+                    # en un experimento propio en lugar de fallar.
+                    experiment = client.get_experiment_by_name(EVALUATION_EXPERIMENT)
+                    experiment_id = (
+                        experiment.experiment_id if experiment else client.create_experiment(EVALUATION_EXPERIMENT)
+                    )
                 with mlflow.start_run(
-                    experiment_id=parent.info.experiment_id,
+                    experiment_id=experiment_id,
                     run_name=f"api-evaluation-{evaluation_id}",
                     tags={
                         "drone_rescue.evaluation_of": str(manifest["run_id"]),

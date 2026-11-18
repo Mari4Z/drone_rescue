@@ -26,6 +26,7 @@ from pathlib import Path
 import mlflow
 import yaml
 from mlflow import MlflowClient
+from mlflow.exceptions import MlflowException
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -141,12 +142,24 @@ def register(state_path: str) -> None:
     """Etapa 5: comprueba hashes y procedencia del modelo en MLflow."""
     state = _read_state(state_path)
     manifest = _manifest(state["run_id"])
-    downloaded = Path(mlflow.artifacts.download_artifacts(artifact_uri=manifest["model_uri"]))
+    source = "MLflow"
+    try:
+        downloaded = Path(mlflow.artifacts.download_artifacts(artifact_uri=manifest["model_uri"]))
+    except (MlflowException, OSError):
+        # MLflow no tiene el run (release descargada en otro equipo): se comprueba el paquete local del manifiesto.
+        package = manifest.get("package_path")
+        downloaded = PROJECT_ROOT / str(package) / Path(manifest["model_uri"]).name if package else None
+        if downloaded is None or not downloaded.is_file():
+            raise
+        source = "paquete local"
     if _sha256(downloaded) != manifest["model_sha256"]:
-        raise ValueError("El modelo en MLflow no coincide con el manifiesto")
-    version = MlflowClient().get_model_version(manifest["registry_name"], manifest["registry_version"])
+        raise ValueError(f"El modelo en {source} no coincide con el manifiesto")
+    try:
+        registry_status = MlflowClient().get_model_version(manifest["registry_name"], manifest["registry_version"]).status
+    except MlflowException:
+        registry_status = "sin registro en este MLflow"
     _write_state(state_path, "register", {
-        "registry_uri": manifest["registry_uri"], "registry_status": version.status,
+        "registry_uri": manifest["registry_uri"], "registry_status": registry_status, "model_source": source,
         "model_sha256": manifest["model_sha256"], "git_commit": manifest["git_commit"], "git_dirty": manifest["git_dirty"],
     })
 
@@ -191,8 +204,13 @@ def write_publication(level: str, entry: dict, directory: Path = PUBLISHED_DIR) 
     return record
 
 
-def _set_alias(entry: dict) -> None:
-    MlflowClient().set_registered_model_alias(entry["registry_name"], PRODUCTION_ALIAS, entry["registry_version"])
+def _set_alias(entry: dict) -> bool:
+    """Mueve el alias `produccion` del Registry. Devuelve False si este MLflow no tiene el modelo registrado."""
+    try:
+        MlflowClient().set_registered_model_alias(entry["registry_name"], PRODUCTION_ALIAS, entry["registry_version"])
+        return True
+    except MlflowException:
+        return False
 
 
 def select(state_path: str) -> None:
@@ -203,7 +221,11 @@ def select(state_path: str) -> None:
     evaluation = json.loads(Path(state["evaluation_output"]).read_text(encoding="utf-8"))
     decision = decide(evaluation, manifest["level_id"], criteria, current_published(manifest["level_id"]))
     decision["criteria_sha256"] = _sha256(CRITERIA_PATH)
-    mlflow.MlflowClient().set_tag(state["run_id"], "selection_decision", decision["decision"])
+    try:
+        mlflow.MlflowClient().set_tag(state["run_id"], "selection_decision", decision["decision"])
+        decision["selection_tag"] = "aplicada"
+    except MlflowException:
+        decision["selection_tag"] = "omitida: este MLflow no tiene el run"
     _write_state(state_path, "select", decision, decision=decision["decision"])
 
 
@@ -227,8 +249,9 @@ def publish(state_path: str) -> None:
         "success_rate": select_stage["success_rate"],
         "mean_steps": select_stage["mean_steps"],
     })
-    _set_alias(entry)
-    _write_state(state_path, "publish", {"published": True, "publication_version": entry["publication_version"], "run_id": entry["run_id"]})
+    alias = _set_alias(entry)
+    _write_state(state_path, "publish", {"published": True, "publication_version": entry["publication_version"], "run_id": entry["run_id"],
+                                         "registry_alias": "aplicado" if alias else "omitido: este MLflow no tiene el modelo registrado"})
 
 
 def verify(level: str, state_path: str | None = None) -> dict:
@@ -275,8 +298,8 @@ def rollback(level: str, directory: Path = PUBLISHED_DIR, apply_alias: bool = Tr
     entry = write_publication(level, {"action": "rollback", "restored_from_version": previous["publication_version"],
                                       "replaced_version": current["publication_version"],
                                       **{field: previous[field] for field in fields}}, directory)
-    if apply_alias:
-        _set_alias(entry)
+    if apply_alias and not _set_alias(entry):
+        print("aviso: este MLflow no tiene el modelo registrado; la publicación se restauró sin mover el alias", file=sys.stderr)
     return entry
 
 
