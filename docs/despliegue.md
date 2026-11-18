@@ -4,7 +4,7 @@
 
 | Pieza | Dónde | Cómo se comprueba |
 |---|---|---|
-| Web | Vercel ([drone-rescue-snowy.vercel.app](https://drone-rescue-snowy.vercel.app)), con `web/` como Root Directory y `VITE_API_BASE_URL` apuntando a la API | Abre y muestra el catálogo; si la API no responde, muestra «API no disponible» |
+| Web | Vercel ([drone-rescue-snowy.vercel.app](https://drone-rescue-snowy.vercel.app)), con `web/` como Root Directory. `/` abre el visor 3D de la ciudad (`web/public/visor/index.html`, sin API) y `/app` abre la consola, que usa `VITE_API_BASE_URL` | El visor abre solo; la consola muestra el catálogo y, si la API no responde, «API no disponible» |
 | API | FastAPI en un equipo del grupo, publicada por HTTPS con ngrok mediante [`scripts/serve_public.sh`](../scripts/serve_public.sh) | `GET /health` (estado) y `GET /version` (commit del código y modelo servido) |
 | Experimentos y datos | MLflow local (`artifacts/mlflow/mlflow.db`) en el equipo de la API; copia compartida en DagsHub (MLflow y DVC) | [versionamiento.md](versionamiento.md) |
 | Modelos sin cuenta | Release de GitHub (todos los modelos) y Hugging Face (solo el oficial) | `SHA256SUMS` y `scripts/verify_packages.py` |
@@ -14,8 +14,10 @@ La API solo existe mientras ese equipo esté encendido, sin suspensión y con `s
 **Producción en Vercel**
 
 - Proyecto `visualizacion1/drone-rescue`: Root Directory `web`, Vite, `npm ci` y `npm run build`, salida `dist`. La variable `VITE_API_BASE_URL` existe solo en el entorno Production.
-- Producción vigente: deployment `dpl_2ZRB4YzTXNCTSyLzjbUiCQi1Ys48`, reconstruido desde `main` (commit `9cfaddd`) el 17 de noviembre de 2026 a las 21:15 (hora de Colombia) con `vercel redeploy ... --target production`. Sirve `drone-rescue-snowy.vercel.app`. El deployment anterior, del 11 de noviembre y construido desde la rama `feature/integra-main`, es `dpl_rgXZnnqoftvpSkrpg1a2kKLVoDam` y sirve de respaldo (`vercel rollback` o `vercel promote`).
+- [`web/vercel.json`](../web/vercel.json) define las rutas: `/` y `/visor` sirven el visor (`web/public/visor/index.html`, copia exacta de `drone_view_city_hard.html`), `/app` sirve la consola y todo lo demás sale de los archivos construidos. La consola no cambia: usa enlaces con hash y recursos con rutas absolutas.
+- Producción vigente: deployment `dpl_H2zeMpFCQmZ4AtxCZPR2gSNR2ps8`, reconstruido desde `main` (commit `ca046da`) el 17 de noviembre de 2026 a las 21:27 (hora de Colombia) con `vercel redeploy ... --target production`. Sirve `drone-rescue-snowy.vercel.app`. Anteriores, que sirven de respaldo (`vercel rollback` o `vercel promote`): `dpl_2ZRB4YzTXNCTSyLzjbUiCQi1Ys48` (commit `9cfaddd`, con la consola en `/` y sin visor) y `dpl_rgXZnnqoftvpSkrpg1a2kKLVoDam` (11 de noviembre, rama `feature/integra-main`).
 - Un `git push` a `main` crea un deployment de **Preview**, no de producción (se ve con `vercel ls`), y ese Preview no tiene `VITE_API_BASE_URL`, así que no llega a la API. Para actualizar producción desde `main`: `vercel ls` para ver la URL del Preview del commit, `vercel redeploy <esa URL> --target production` desde `web/`, y comprobar con `vercel inspect https://drone-rescue-snowy.vercel.app` (target `production`, alias `git-main`) y abriendo la web («API conectada»). La alternativa permanente es cambiar la rama de producción a `main` en los ajustes del proyecto de Vercel; no se hizo.
+- Un Preview no se puede abrir sin sesión de Vercel; se comprueba con `vercel curl <ruta> --deployment <URL del Preview>`. Sus páginas HTML de `/` llevan 163 bytes más (un script de comentarios que Vercel inyecta solo en Preview); en producción el visor sale idéntico byte a byte.
 - Solo `drone-rescue-snowy.vercel.app` es pública. `drone-rescue-visualizacion1.vercel.app` redirige al inicio de sesión de Vercel (protección del proyecto), así que no sirve para la revisión.
 
 **Antes de una revisión**

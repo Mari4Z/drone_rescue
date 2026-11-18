@@ -22,8 +22,9 @@ Un dron sale de BASE, recoge un suministro, lo entrega en la zona de entrega y v
 
 ## Acceso para la revisión
 
-- **Web:** https://drone-rescue-snowy.vercel.app
-- **API:** la web consume una API que corre en un equipo del grupo, publicada con ngrok. Solo está disponible mientras ese equipo esté encendido; si la web muestra «API no disponible», no es un fallo de la página. `GET /health` y `GET /version` (commit del código y modelo servido) de la API sirven para comprobarla.
+- **Web principal:** https://drone-rescue-snowy.vercel.app abre el visor 3D de la ciudad con obstáculos que importan (ambiente 3.1.0, 12 mapas del mejor modelo); no depende de la API.
+- **Consola:** https://drone-rescue-snowy.vercel.app/app tiene el catálogo, la carga de modelos y las evaluaciones.
+- **API:** la consola consume una API que corre en un equipo del grupo, publicada con ngrok. Solo está disponible mientras ese equipo esté encendido; si la consola muestra «API no disponible», no es un fallo de la página. `GET /health` y `GET /version` (commit del código y modelo servido) de la API sirven para comprobarla.
 - **Contraseñas:** la demostración no exige clave. Si se activa, se entrega por el canal del curso y nunca por correo ([docs/despliegue.md](docs/despliegue.md)).
 - **Modelos sin cuenta:** release de GitHub (`modelos-20261117`, todos los modelos) y [Hugging Face](https://huggingface.co/Mari4Z/drone-rescue) (solo el modelo oficial). Con ellos se pueden verificar y reproducir las evaluaciones sin la API (ver «Reproducir una evaluación»).
 - **Experimentos y datos:** MLflow y DVC están en [DagsHub](https://dagshub.com/Mari4Z/drone_rescue), que pide una cuenta gratuita incluso para leer. La release **no incluye** la base de MLflow: levantar la API y la web en local necesita los runs (`dvc pull artifacts/mlflow`, con cuenta de DagsHub); sin ellos el catálogo queda vacío y no se puede cargar un modelo.
@@ -133,7 +134,7 @@ La API ejecuta el mismo ambiente Python versionado; no delega transiciones ni f�
 ## Arquitectura
 
 ```
-Navegador ──► Vercel: web estática (Vite, TypeScript, Three.js)
+Navegador ──► Vercel: visor 3D estático en / y consola (Vite, TypeScript, Three.js) en /app
                   │  HTTPS (VITE_API_BASE_URL)
                   ▼
             API FastAPI ──► ambiente Gymnasium (Python) + modelo cargado
@@ -150,7 +151,7 @@ Navegador ──► Vercel: web estática (Vite, TypeScript, Three.js)
 - `configs/`: perfiles, niveles, experimentos, suites de evaluación y criterios de selección.
 - `manifests/`: un manifiesto por run, con hashes, URIs y runtime; `manifests/published/` guarda las publicaciones.
 - `artifacts/`: modelos, resultados, tablas Q y MLflow (en DVC, no en Git).
-- `web/`: aplicación Vite, TypeScript y Three.js ([web/README.md](web/README.md)).
+- `web/`: consola Vite, TypeScript y Three.js ([web/README.md](web/README.md)). `web/public/visor/index.html` es `drone_view_city_hard.html` tal cual y `web/vercel.json` lo sirve en la raíz, con la consola en `/app`.
 - `viewer/`, `cli.py`: visores 3D y línea de comandos de las familias de cuadrícula.
 - `scripts/`: verificación de paquetes, reproducción de evaluaciones, publicación en Hugging Face, DagsHub y API pública.
 - `tests/`: pruebas del ambiente, la API, los pipelines y las familias de cuadrícula.

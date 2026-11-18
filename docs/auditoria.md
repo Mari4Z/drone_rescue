@@ -37,13 +37,13 @@ Estados: **Cumple**, **Parcial** (existe, pero con una limitación que se explic
 
 | Comprobación | Estado | Cómo se comprobó |
 |---|---|---|
-| La URL abre | Cumple | HTTP 200 el 17 de noviembre de 2026 tras el deployment de producción; Chrome sin pantalla carga la escena 3D y muestra «API conectada» |
+| La URL abre | Cumple | El 17 de noviembre de 2026, con Chrome sin pantalla: la raíz abre el visor 3D y `/app` la consola con «API conectada» |
 | La API usa HTTPS y admite el origen del frontend (CORS) | Cumple | La API pública respondió con `access-control-allow-origin` para el origen de Vercel |
 | Las rutas de producción no apuntan a localhost | Cumple | `web/src/api.ts` rechaza `localhost` y las URL sin HTTPS en producción |
 | Los modelos y escenarios se recuperan sin depender de carpetas personales | Parcial | Release y DVC los recuperan, pero la API y la web locales necesitan además la base de MLflow (351 MB), que la release no incluye |
 | Se puede evaluar un modelo antiguo y el recomendado | Parcial | Con la API pública se comprobó el catálogo (35 runs), la carga del modelo oficial (SHA-256 coincidente) y el avance de un episodio. No se ejecutó una evaluación completa (escribiría en MLflow) ni se probó con clics desde la web |
 | Un error de servicio se muestra como error; un replay se identifica como replay | Sin verificar | Comportamiento de la interfaz; no se revisó en esta auditoría |
-| La release y el deployment identifican el código entregado | Parcial | Producción se reconstruyó desde `main` (deployment `dpl_2ZRB4Y…`, commit `9cfaddd`, alias de rama `git-main`) y su bundle es idéntico al construido de `web/`. `GET /version` da el commit de la API y coincide con el tag `modelos-20261117`; desde ahora se fija al arrancar. Falta un tag de entrega final |
+| La release y el deployment identifican el código entregado | Parcial | Producción se reconstruyó desde `main` (deployment `dpl_H2zeMp…`, commit `ca046da`, alias de rama `git-main`); el visor de la raíz es idéntico byte a byte a `drone_view_city_hard.html` y el bundle de la consola, al construido de `web/`. `GET /version` da el commit de la API y coincide con el tag `modelos-20261117`; desde ahora se fija al arrancar. Falta un tag de entrega final |
 | El docente no debe instalar un servidor | Cumple | La web y la API se abren por URL |
 | Backend y registro disponibles durante la revisión | Abierto | Depende de un equipo encendido ([despliegue.md](despliegue.md)) |
 
@@ -58,7 +58,8 @@ Estados: **Cumple**, **Parcial** (existe, pero con una limitación que se explic
 | `GET /health`, `GET /version` y `GET /catalog` de la API pública | Responden sin clave; `/version` mostraba el commit `715894d` |
 | Construir `web/` con la `VITE_API_BASE_URL` de producción y comparar con el bundle que sirve Vercel | Mismo archivo con hash (`assets/index-CjrhFWLv.js`): lo publicado es el código de `web/` del repositorio |
 | `vercel inspect https://drone-rescue-snowy.vercel.app` tras `vercel redeploy ... --target production` | `target production`, `Ready`, alias `drone-rescue-snowy` y `git-main`; construido desde `main` |
-| Captura con Chrome sin pantalla de la web de producción | Escena 3D y panel de control; indicador «API conectada» |
+| SHA-256 de `/`, `/visor` y `/visor/` en producción frente a `drone_view_city_hard.html` | `57b35d73c5cb9bb3…` en los tres: idénticos |
+| Capturas con Chrome sin pantalla de `/` y de `/app` | Visor de la ciudad con su animación; consola con panel de control e indicador «API conectada» |
 | API pública: `GET /catalog`, `POST /load` del modelo oficial, `GET /episode/step` | 35 runs; SHA-256 servido `bdf35f2e…` igual al de la publicación v0004; el episodio avanza |
 
 ## Pendiente o decisión del equipo
