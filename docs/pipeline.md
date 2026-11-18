@@ -83,6 +83,20 @@ Restaura la versión inmediatamente anterior a la vigente como una versión nuev
 
 Cada ejecución agrega una versión a `manifests/published/<nivel>/`: no es una comprobación sin efectos. Un nivel con una sola publicación no tiene versión anterior y el rollback falla con ese diagnóstico. Para ver qué modelo está vigente sin modificar nada: `ls manifests/published/N1/` (la versión más alta) y `GET /version` de la API.
 
+### Sin la base de MLflow original
+
+Con solo la release (sin `artifacts/mlflow`) el pipeline sigue funcionando, y lo que MLflow no puede hacer queda anotado en la evidencia en lugar de hacer fallar la etapa:
+
+| Etapa | Qué pasa si este MLflow no tiene el run o el modelo registrado |
+|---|---|
+| 5 `register` | Comprueba el hash del paquete local (`model_source: paquete local`) y anota `registry_status: sin registro en este MLflow` |
+| 6 `select` | Decide igual con los criterios; anota `selection_tag: omitida` porque no puede etiquetar el run |
+| 7 `publish` | Publica igual la versión nueva; anota `registry_alias: omitido` |
+| 8 `verify` | Funciona: la API carga el modelo desde el paquete local |
+| Rollback | Restaura la publicación y avisa por stderr que no movió el alias `produccion` |
+
+Se probó en una copia limpia con la release: `verify` y `rollback --level N1` terminaron bien. Las pruebas están en `tests/test_offline.py`.
+
 ## Comprobar la evidencia sin Airflow
 
 ```bash

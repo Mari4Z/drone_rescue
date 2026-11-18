@@ -23,7 +23,7 @@ La API solo existe mientras ese equipo esté encendido, sin suspensión y con `s
 **Antes de una revisión**
 
 1. Equipo enchufado y con la suspensión desactivada. Desde la raíz del proyecto: `./scripts/serve_public.sh` (requiere haber ejecutado una vez `ngrok config add-authtoken <token>`).
-2. Comprobar `GET /health` (`{"status":"ok",...}`) y `GET /version` (el `git_commit` debe ser el del tag `v1.0.0`) en la URL pública de la API, abrir la web y cargar un modelo.
+2. Comprobar `GET /health` (`{"status":"ok",...}`) y `GET /version` (el `git_commit` debe ser el del tag `v1.0.1`) en la URL pública de la API, abrir la web y cargar un modelo.
 3. En Vercel, `vercel inspect https://drone-rescue-snowy.vercel.app` debe mostrar `target production` y el alias `git-main`; si `web/` cambió desde el último deployment de producción, actualizarlo como se explica arriba. `VITE_API_BASE_URL` debe ser la URL HTTPS vigente de la API. Sin la CLI: construir `web/` con esa misma variable (`npm run build -- --outDir /tmp/web --emptyOutDir`) y comparar el nombre `assets/index-*.js` con el de la web publicada; si coinciden, el código es el mismo.
 4. Si cambió el código, reiniciar la API: `/version` lee el commit al arrancar.
 
@@ -32,7 +32,7 @@ La API solo existe mientras ese equipo esté encendido, sin suspensión y con `s
 - La demostración corre en modo `development` y **no exige clave**: cualquiera con la URL de la API puede usarla, incluido lanzar entrenamientos, limitados por `DRONE_RESCUE_TRAINING_MAX_TIMESTEPS` (100 000 pasos en `serve_public.sh`). Está pensada solo para demostraciones.
 - Para exigir clave: `DRONE_RESCUE_API_TOKEN=<cadena larga> ./scripts/serve_public.sh`. Con la variable definida, la API pide `X-API-Key` en todo salvo `/health` y `/version`, y la clave se escribe en el campo de la web (se guarda solo en `sessionStorage`). La clave se entrega por el canal del curso, nunca por correo ni en el repositorio.
 - DagsHub (MLflow y DVC) exige una cuenta gratuita incluso para leer. Cada persona usa su propia cuenta y su propio token, que solo queda en `.dvc/config.local`. Sin cuenta, los modelos se recuperan de la release de GitHub o de Hugging Face.
-- **Si la API no está disponible**, sin cuenta se pueden verificar y reproducir los modelos desde la release (`scripts/verify_packages.py` y `scripts/reproduce_evaluation.py`, ver el [README](../README.md)). Levantar la web y la API en el equipo de quien revisa necesita además los runs de MLflow (`dvc pull artifacts/mlflow`, con cuenta de DagsHub): la release no incluye la base de MLflow y, sin ella, el catálogo queda vacío y `POST /load` falla (probado con una copia limpia y solo la release).
+- **Si la API no está disponible**, quien revisa puede levantarla y abrir la consola en su propio equipo con solo la release descomprimida en un clon del repositorio, sin cuenta de DagsHub y sin la base de MLflow original (`python -m api.main` y `cd web && npm ci && npm run dev`; ver el [README](../README.md)). El catálogo se arma con `manifests/` y los paquetes de modelos; los de Q-learning se listan, pero no se pueden cargar (probado con una copia limpia y solo la release).
 
 ## Arquitectura preparada (Render y DagsHub)
 

@@ -72,6 +72,8 @@ dvc pull
 
 Los experimentos de MLflow se ven en `https://dagshub.com/Mari4Z/drone_rescue/experiments`. Sin cuenta, la vía de recuperación es la release de GitHub (todos los modelos) o Hugging Face (el oficial).
 
+**La base de MLflow original no sirve en otro equipo:** guarda las rutas de los artefactos como absolutas de la máquina donde se entrenó (`/Users/.../artifacts/mlflow/mlruns/...`), así que ni la release la incluye ni `dvc pull artifacts/mlflow` la hace utilizable fuera de esa ruta. Por eso la API y el pipeline funcionan también desde `manifests/` y `artifacts/models/<run_id>/` cuando MLflow no tiene el run: el manifiesto trae los hashes y el paquete trae los archivos, y cada archivo se verifica contra su SHA-256 antes de usarse. Para ver el historial de MLflow completo se usa DagsHub, donde los artefactos están en el servidor.
+
 ### Hugging Face
 
 El repositorio público [`Mari4Z/drone-rescue`](https://huggingface.co/Mari4Z/drone-rescue) tiene **solo el modelo oficial**, la publicación vigente de N1 en `manifests/published/`: `model.zip` (formato nativo de Stable-Baselines3, se carga con `PPO.load`) y su ficha (`README.md`) con las instrucciones de uso, la entrada, la salida y los resultados. El manifiesto, la configuración y la evaluación quedan en Git y DVC. Cada publicación es un tag con el mismo nombre que la release de GitHub:

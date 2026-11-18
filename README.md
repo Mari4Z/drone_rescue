@@ -2,7 +2,7 @@
 
 Un dron sale de BASE, recoge un suministro, lo entrega en la zona de entrega y vuelve a BASE. El ambiente (Gymnasium, física continua en un mundo de 100 × 100 × 60 m con columnas, viento y batería) vive en Python; un agente PPO (Stable-Baselines3) aprende a pilotarlo; una web en Three.js muestra el estado que le devuelve una API FastAPI. Cada experimento queda registrado en MLflow, versionado con Git y DVC, y publicado por un pipeline de Airflow que puede volver a la versión anterior. Proyecto final de MLOps, Universidad Externado de Colombia.
 
-**Estado:** hay un modelo oficial para N1, `ppo-v3c-n1` (10 de 10 en 199 pasos). Ningún modelo resuelve N2 ni N3. Los resultados, también los de los intentos que no mejoraron, están en el [informe](docs/informe.md). La entrega final está marcada con el tag `v1.0.0`.
+**Estado:** hay un modelo oficial para N1, `ppo-v3c-n1` (10 de 10 en 199 pasos). Ningún modelo resuelve N2 ni N3. Los resultados, también los de los intentos que no mejoraron, están en el [informe](docs/informe.md). La entrega final está marcada con el tag `v1.0.1`.
 
 ## Dónde está cada cosa
 
@@ -26,8 +26,8 @@ Un dron sale de BASE, recoge un suministro, lo entrega en la zona de entrega y v
 - **Consola:** https://drone-rescue-snowy.vercel.app/app tiene el catálogo, la carga de modelos y las evaluaciones.
 - **API:** la consola consume una API que corre en un equipo del grupo, publicada con ngrok. Solo está disponible mientras ese equipo esté encendido; si la consola muestra «API no disponible», no es un fallo de la página. `GET /health` y `GET /version` (commit del código y modelo servido) de la API sirven para comprobarla.
 - **Contraseñas:** la demostración no exige clave. Si se activa, se entrega por el canal del curso y nunca por correo ([docs/despliegue.md](docs/despliegue.md)).
-- **Modelos sin cuenta:** release de GitHub (`modelos-20261117`, todos los modelos) y [Hugging Face](https://huggingface.co/Mari4Z/drone-rescue) (solo el modelo oficial). Con ellos se pueden verificar y reproducir las evaluaciones sin la API (ver «Reproducir una evaluación»).
-- **Experimentos y datos:** MLflow y DVC están en [DagsHub](https://dagshub.com/Mari4Z/drone_rescue), que pide una cuenta gratuita incluso para leer. La release **no incluye** la base de MLflow: levantar la API y la web en local necesita los runs (`dvc pull artifacts/mlflow`, con cuenta de DagsHub); sin ellos el catálogo queda vacío y no se puede cargar un modelo.
+- **Modelos sin cuenta:** release de GitHub (`modelos-20261117`, todos los modelos) y [Hugging Face](https://huggingface.co/Mari4Z/drone-rescue) (solo el modelo oficial). Con la release se pueden verificar y reproducir las evaluaciones y también levantar la API y la consola en local (ver «Ejecución»).
+- **Experimentos y datos:** MLflow y DVC están en [DagsHub](https://dagshub.com/Mari4Z/drone_rescue), que pide una cuenta gratuita incluso para leer. No hace falta para revisar: la base de MLflow original guarda rutas absolutas de la máquina de entrenamiento y no se distribuye; con la release, la API y el pipeline usan `manifests/` y los paquetes de modelos.
 
 ## Requisitos e instalación
 
@@ -59,7 +59,7 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Para reproducir exactamente la entrega final, usa su tag: `git checkout v1.0.0` (los modelos están en la release `modelos-20261117`). El archivo `.env` es local y no va a Git; `.env.example` solo documenta nombres de variables y valores de desarrollo no sensibles.
+Para reproducir exactamente la entrega final, usa su tag: `git checkout v1.0.1` (los modelos están en la release `modelos-20261117`). El archivo `.env` es local y no va a Git; `.env.example` solo documenta nombres de variables y valores de desarrollo no sensibles.
 
 ## Ejecución
 
@@ -85,6 +85,16 @@ python scripts/reproduce_evaluation.py            # el modelo oficial de N1
 python scripts/reproduce_evaluation.py <run_id>   # otro run PPO
 python scripts/verify_packages.py                 # hash de cada archivo de los paquetes contra su manifiesto
 ```
+
+**API y consola con solo la release** (sin la base de MLflow original ni cuenta de DagsHub): con la release descomprimida en la raíz del repositorio,
+
+```bash
+python -m api.main                       # API en http://127.0.0.1:8000
+cd web && npm ci && npm run dev          # consola en http://127.0.0.1:5173, en otra terminal
+python -m pipelines.pipeline_steps verify --level N1     # carga la publicación vigente por la API
+```
+
+El catálogo se arma con `manifests/` y los paquetes: lista los 41 runs, los 14 modelos PPO figuran como cargables (se probaron la carga y la evaluación del oficial) y los 9 runs cuyos pesos se perdieron salen como «sin checkpoint disponible». Los de Q-learning (exp-001 a exp-004) se listan pero no se pueden cargar, porque su configuración solo vive en MLflow. Lo que lances (evaluaciones, entrenamientos) se guarda en una base de MLflow nueva en `artifacts/mlflow/`.
 
 **Pipeline con Airflow y rollback:** [docs/pipeline.md](docs/pipeline.md).
 

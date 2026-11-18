@@ -1,6 +1,6 @@
 # Informe breve: decisiones, resultados, límites y contribuciones
 
-Estado al 17 de noviembre de 2026; la entrega final está marcada con el tag `v1.0.0`. Complementa el [README](../README.md); cada afirmación remite al archivo que la respalda. Las cifras de evaluación salen de `evaluacion.json` de cada paquete y de los manifiestos, y se pueden repetir con [`scripts/reproduce_evaluation.py`](../scripts/reproduce_evaluation.py).
+Estado al 17 de noviembre de 2026; la entrega final está marcada con el tag `v1.0.1`. Complementa el [README](../README.md); cada afirmación remite al archivo que la respalda. Las cifras de evaluación salen de `evaluacion.json` de cada paquete y de los manifiestos, y se pueden repetir con [`scripts/reproduce_evaluation.py`](../scripts/reproduce_evaluation.py).
 
 ## 1. Misión y estado
 
@@ -91,7 +91,7 @@ En la misión principal, N3 (N2 más viento) solo muestra la degradación: `ppo-
 - Cinco manifiestos históricos no son reproducibles (sin `config_sha256` ni `runtime_ref`) y no se usan para seleccionar. `requirements_sha256` solo está en los manifiestos de los runs más recientes; `requirements.txt` fija todas las versiones.
 - En MLflow todos los runs terminaron (`FINISHED`); los rechazos quedan como decisión (`selection_decision`, [decision.md](decision.md), evidencia del pipeline), no como estado del run.
 - La API corre en un equipo del grupo y solo está disponible mientras ese equipo esté encendido ([despliegue.md](despliegue.md)). DagsHub exige una cuenta incluso para leer; sin cuenta, los modelos se recuperan de la release de GitHub o de Hugging Face (solo el oficial).
-- **La release no incluye la base de MLflow** (351 MB). Con una copia limpia y solo la release, `scripts/verify_packages.py` y `scripts/reproduce_evaluation.py` funcionan, pero la API arranca con el catálogo vacío y `POST /load` falla («Run … not found»): levantar la web en local exige `dvc pull artifacts/mlflow`, es decir, una cuenta de DagsHub.
+- **La base de MLflow original no se distribuye** (351 MB): guarda las rutas de los artefactos como absolutas de la máquina donde se entrenó, así que en otro equipo no sirve ni con `dvc pull`. Con solo la release, la API y el pipeline usan `manifests/` y los paquetes de modelos, y el SHA-256 del manifiesto sigue verificando cada archivo. En una copia limpia el catálogo lista los 41 runs, 14 modelos PPO figuran como cargables (se probó el oficial: carga, episodio completo y evaluación) y `verify` y `rollback` funcionan. Los runs de Q-learning (exp-001 a exp-004, n1 a n3) se listan pero no se pueden cargar, porque su configuración y normalización solo viven en MLflow; 9 runs aparecen como «sin checkpoint disponible» (pesos perdidos); y sin el Registry de MLflow el rollback restaura la publicación sin mover el alias `produccion`. La release `v1.0.0`, anterior a esta corrección, no funcionaba así: la API arrancaba con el catálogo vacío.
 - Los resultados de la cuadrícula no son comparables con los de la misión principal: son otra misión, más simple.
 
 ## 8. Contribuciones

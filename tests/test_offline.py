@@ -125,6 +125,28 @@ def test_pipeline_alias_is_best_effort_when_the_registry_lacks_the_model(tmp_pat
     assert "no tiene el modelo registrado" in capsys.readouterr().err
 
 
+def test_pipeline_select_and_publish_annotate_what_mlflow_could_not_do(tmp_path, monkeypatch):
+    mlflow.set_tracking_uri(f"sqlite:///{tmp_path}/vacio.db")
+    manifest = {"run_id": "x", "level_id": "N1", "model_family": "drone-rescue-v3", "model_sha256": "a",
+                "registry_name": "m", "registry_version": "1", "registry_uri": "models:/m/1", "git_commit": "c"}
+    monkeypatch.setattr(steps, "_manifest", lambda run_id, manifest_dir=None: manifest)
+    real_write = steps.write_publication
+    monkeypatch.setattr(steps, "write_publication", lambda level, entry, directory=None: real_write(level, entry, tmp_path))
+    monkeypatch.setattr(steps, "current_published", lambda level, directory=None: None)
+    evaluation = tmp_path / "evaluacion.json"
+    evaluation.write_text(json.dumps({"cases": [{"level_id": "N1", "metrics": {
+        "success_rate": 1.0, "mean_steps": 200.0, "cause_counts": {}}}]}), encoding="utf-8")
+    state = tmp_path / "estado.json"
+    state.write_text(json.dumps({"stages": {}, "run_id": "x", "evaluation_output": str(evaluation)}), encoding="utf-8")
+    steps.select(str(state))
+    select = json.loads(state.read_text(encoding="utf-8"))["stages"]["select"]
+    assert select["decision"] == "aceptado" and select["selection_tag"].startswith("omitida")
+    steps.publish(str(state))
+    publish = json.loads(state.read_text(encoding="utf-8"))["stages"]["publish"]
+    assert publish["published"] is True and publish["registry_alias"].startswith("omitido")
+    assert steps.published_versions("N1", tmp_path)[0]["run_id"] == "x"
+
+
 def test_pipeline_register_checks_the_local_package_when_mlflow_has_no_run(tmp_path, monkeypatch):
     mlflow.set_tracking_uri(f"sqlite:///{tmp_path}/vacio.db")
     package = tmp_path / "models" / "x"
