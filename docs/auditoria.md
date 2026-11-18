@@ -37,13 +37,13 @@ Estados: **Cumple**, **Parcial** (existe, pero con una limitación que se explic
 
 | Comprobación | Estado | Cómo se comprobó |
 |---|---|---|
-| La URL abre | Cumple | HTTP 200 el 17 de noviembre de 2026 |
+| La URL abre | Cumple | HTTP 200 el 17 de noviembre de 2026 tras el deployment de producción; Chrome sin pantalla carga la escena 3D y muestra «API conectada» |
 | La API usa HTTPS y admite el origen del frontend (CORS) | Cumple | La API pública respondió con `access-control-allow-origin` para el origen de Vercel |
 | Las rutas de producción no apuntan a localhost | Cumple | `web/src/api.ts` rechaza `localhost` y las URL sin HTTPS en producción |
 | Los modelos y escenarios se recuperan sin depender de carpetas personales | Parcial | Release y DVC los recuperan, pero la API y la web locales necesitan además la base de MLflow (351 MB), que la release no incluye |
-| Se puede evaluar un modelo antiguo y el recomendado | Parcial | La API carga y evalúa por `run_id`; este punto no se volvió a ejecutar desde la web en esta revisión |
+| Se puede evaluar un modelo antiguo y el recomendado | Parcial | Con la API pública se comprobó el catálogo (35 runs), la carga del modelo oficial (SHA-256 coincidente) y el avance de un episodio. No se ejecutó una evaluación completa (escribiría en MLflow) ni se probó con clics desde la web |
 | Un error de servicio se muestra como error; un replay se identifica como replay | Sin verificar | Comportamiento de la interfaz; no se revisó en esta auditoría |
-| La release y el deployment identifican el código entregado | Parcial | La web publicada es el código de `web/` (bundle idéntico al construido en local). `GET /version` da el commit de la API y coincide con el tag `modelos-20261117`; desde ahora se fija al arrancar. Falta un tag de entrega final |
+| La release y el deployment identifican el código entregado | Parcial | Producción se reconstruyó desde `main` (deployment `dpl_2ZRB4Y…`, commit `9cfaddd`, alias de rama `git-main`) y su bundle es idéntico al construido de `web/`. `GET /version` da el commit de la API y coincide con el tag `modelos-20261117`; desde ahora se fija al arrancar. Falta un tag de entrega final |
 | El docente no debe instalar un servidor | Cumple | La web y la API se abren por URL |
 | Backend y registro disponibles durante la revisión | Abierto | Depende de un equipo encendido ([despliegue.md](despliegue.md)) |
 
@@ -57,11 +57,14 @@ Estados: **Cumple**, **Parcial** (existe, pero con una limitación que se explic
 | Copia limpia con solo la release: `GET /health`, `GET /catalog`, `POST /load` | `/health` responde; `/catalog` vacío y `/load` falla por falta de la base de MLflow |
 | `GET /health`, `GET /version` y `GET /catalog` de la API pública | Responden sin clave; `/version` mostraba el commit `715894d` |
 | Construir `web/` con la `VITE_API_BASE_URL` de producción y comparar con el bundle que sirve Vercel | Mismo archivo con hash (`assets/index-CjrhFWLv.js`): lo publicado es el código de `web/` del repositorio |
+| `vercel inspect https://drone-rescue-snowy.vercel.app` tras `vercel redeploy ... --target production` | `target production`, `Ready`, alias `drone-rescue-snowy` y `git-main`; construido desde `main` |
+| Captura con Chrome sin pantalla de la web de producción | Escena 3D y panel de control; indicador «API conectada» |
+| API pública: `GET /catalog`, `POST /load` del modelo oficial, `GET /episode/step` | 35 runs; SHA-256 servido `bdf35f2e…` igual al de la publicación v0004; el episodio avanza |
 
 ## Pendiente o decisión del equipo
 
 1. **API sin clave.** Hoy cualquiera con la URL puede usarla, incluido lanzar entrenamientos de hasta 100 000 pasos. Decidir si se activa `DRONE_RESCUE_API_TOKEN` y se entrega por el canal del curso ([despliegue.md](despliegue.md)).
-2. **Tag de entrega.** Crear un tag final sobre el commit definitivo y reiniciar la API para que `/version` muestre ese commit.
+2. **Tag de entrega.** Crear un tag final sobre el commit definitivo, reiniciar la API para que `/version` muestre ese commit y, si `web/` cambió, actualizar producción (`vercel redeploy ... --target production`). Un `git push` a `main` solo crea Previews en Vercel; decidir si se cambia la rama de producción a `main` ([despliegue.md](despliegue.md)).
 3. **La release no trae MLflow.** Para que la revisión local funcione sin cuenta de DagsHub, incluir una base de MLflow reducida en la release o hacer que la API cargue los modelos desde `manifests/` y `artifacts/models/` cuando no encuentre el run.
 4. **Test final reservado.** No existe; está declarado como límite ([informe.md](informe.md), sección 7).
 5. **Contribuciones.** Revisar la sección 8 del informe: se derivó del historial de Git y no refleja el trabajo no versionado.

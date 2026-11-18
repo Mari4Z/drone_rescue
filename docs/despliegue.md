@@ -11,11 +11,18 @@
 
 La API solo existe mientras ese equipo esté encendido, sin suspensión y con `serve_public.sh` en marcha. No hay un servidor permanente.
 
+**Producción en Vercel**
+
+- Proyecto `visualizacion1/drone-rescue`: Root Directory `web`, Vite, `npm ci` y `npm run build`, salida `dist`. La variable `VITE_API_BASE_URL` existe solo en el entorno Production.
+- Producción vigente: deployment `dpl_2ZRB4YzTXNCTSyLzjbUiCQi1Ys48`, reconstruido desde `main` (commit `9cfaddd`) el 17 de noviembre de 2026 a las 21:15 (hora de Colombia) con `vercel redeploy ... --target production`. Sirve `drone-rescue-snowy.vercel.app`. El deployment anterior, del 11 de noviembre y construido desde la rama `feature/integra-main`, es `dpl_rgXZnnqoftvpSkrpg1a2kKLVoDam` y sirve de respaldo (`vercel rollback` o `vercel promote`).
+- Un `git push` a `main` crea un deployment de **Preview**, no de producción (se ve con `vercel ls`), y ese Preview no tiene `VITE_API_BASE_URL`, así que no llega a la API. Para actualizar producción desde `main`: `vercel ls` para ver la URL del Preview del commit, `vercel redeploy <esa URL> --target production` desde `web/`, y comprobar con `vercel inspect https://drone-rescue-snowy.vercel.app` (target `production`, alias `git-main`) y abriendo la web («API conectada»). La alternativa permanente es cambiar la rama de producción a `main` en los ajustes del proyecto de Vercel; no se hizo.
+- Solo `drone-rescue-snowy.vercel.app` es pública. `drone-rescue-visualizacion1.vercel.app` redirige al inicio de sesión de Vercel (protección del proyecto), así que no sirve para la revisión.
+
 **Antes de una revisión**
 
 1. Equipo enchufado y con la suspensión desactivada. Desde la raíz del proyecto: `./scripts/serve_public.sh` (requiere haber ejecutado una vez `ngrok config add-authtoken <token>`).
 2. Comprobar `GET /health` (`{"status":"ok",...}`) y `GET /version` (el `git_commit` debe ser el del tag que se entrega) en la URL pública de la API, abrir la web y cargar un modelo.
-3. En Vercel, comprobar que la rama de producción es `main` y que `VITE_API_BASE_URL` es la URL HTTPS vigente de la API. Sin acceso al panel: construir `web/` con esa misma variable (`npm run build -- --outDir /tmp/web --emptyOutDir`) y comparar el nombre `assets/index-*.js` con el de la web publicada; si coinciden, el código es el mismo.
+3. En Vercel, `vercel inspect https://drone-rescue-snowy.vercel.app` debe mostrar `target production` y el alias `git-main`; si `web/` cambió desde el último deployment de producción, actualizarlo como se explica arriba. `VITE_API_BASE_URL` debe ser la URL HTTPS vigente de la API. Sin la CLI: construir `web/` con esa misma variable (`npm run build -- --outDir /tmp/web --emptyOutDir`) y comparar el nombre `assets/index-*.js` con el de la web publicada; si coinciden, el código es el mismo.
 4. Si cambió el código, reiniciar la API: `/version` lee el commit al arrancar.
 
 **Acceso sin compartir contraseñas**
