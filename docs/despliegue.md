@@ -23,7 +23,7 @@ La API solo existe mientras ese equipo esté encendido, sin suspensión y con `s
 **Antes de una revisión**
 
 1. Equipo enchufado y con la suspensión desactivada. Desde la raíz del proyecto: `./scripts/serve_public.sh` (requiere haber ejecutado una vez `ngrok config add-authtoken <token>`).
-2. Comprobar `GET /health` (`{"status":"ok",...}`) y `GET /version` (el `git_commit` debe ser el del tag que se entrega) en la URL pública de la API, abrir la web y cargar un modelo.
+2. Comprobar `GET /health` (`{"status":"ok",...}`) y `GET /version` (el `git_commit` debe ser el del tag `v1.0.0`) en la URL pública de la API, abrir la web y cargar un modelo.
 3. En Vercel, `vercel inspect https://drone-rescue-snowy.vercel.app` debe mostrar `target production` y el alias `git-main`; si `web/` cambió desde el último deployment de producción, actualizarlo como se explica arriba. `VITE_API_BASE_URL` debe ser la URL HTTPS vigente de la API. Sin la CLI: construir `web/` con esa misma variable (`npm run build -- --outDir /tmp/web --emptyOutDir`) y comparar el nombre `assets/index-*.js` con el de la web publicada; si coinciden, el código es el mismo.
 4. Si cambió el código, reiniciar la API: `/version` lee el commit al arrancar.
 

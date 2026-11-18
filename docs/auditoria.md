@@ -24,7 +24,7 @@ Estados: **Cumple**, **Parcial** (existe, pero con una limitación que se explic
 
 | Entregable | Estado | Evidencia |
 |---|---|---|
-| URL de Vercel y repositorio con release o tag identificable | Parcial | Vercel responde. Los tags `modelos-*` son pre-releases («no es una entrega»); falta un tag final sobre el código definitivo |
+| URL de Vercel y repositorio con release o tag identificable | Cumple | Vercel responde; la entrega está marcada con el tag `v1.0.0`. Los tags `modelos-*` son pre-releases de modelos («no es una entrega») |
 | README con instalación, ejecución, variables, arquitectura y reproducción | Cumple | [README.md](../README.md) |
 | Ficha del ambiente y tres niveles | Cumple | Ver arriba |
 | Cuatro configuraciones con hipótesis y sus runs y estados en MLflow | Cumple | Ver arriba |
@@ -43,7 +43,7 @@ Estados: **Cumple**, **Parcial** (existe, pero con una limitación que se explic
 | Los modelos y escenarios se recuperan sin depender de carpetas personales | Parcial | Release y DVC los recuperan, pero la API y la web locales necesitan además la base de MLflow (351 MB), que la release no incluye |
 | Se puede evaluar un modelo antiguo y el recomendado | Parcial | Con la API pública se comprobó el catálogo (35 runs), la carga del modelo oficial (SHA-256 coincidente) y el avance de un episodio. No se ejecutó una evaluación completa (escribiría en MLflow) ni se probó con clics desde la web |
 | Un error de servicio se muestra como error; un replay se identifica como replay | Sin verificar | Comportamiento de la interfaz; no se revisó en esta auditoría |
-| La release y el deployment identifican el código entregado | Parcial | Producción se reconstruyó desde `main` (deployment `dpl_H2zeMp…`, commit `ca046da`, alias de rama `git-main`); el visor de la raíz es idéntico byte a byte a `drone_view_city_hard.html` y el bundle de la consola, al construido de `web/`. `GET /version` da el commit de la API y coincide con el tag `modelos-20261117`; desde ahora se fija al arrancar. Falta un tag de entrega final |
+| La release y el deployment identifican el código entregado | Parcial | Producción se reconstruyó desde `main` (deployment `dpl_H2zeMp…`, commit `ca046da`, alias de rama `git-main`); el visor de la raíz es idéntico byte a byte a `drone_view_city_hard.html` y el bundle de la consola, al construido de `web/`. El tag `v1.0.0` marca el commit entregado, y su `web/` es idéntico al de `ca046da`, que es lo desplegado. `GET /version` fija el commit al arrancar: falta reiniciar la API para que muestre el commit de `v1.0.0` |
 | El docente no debe instalar un servidor | Cumple | La web y la API se abren por URL |
 | Backend y registro disponibles durante la revisión | Abierto | Depende de un equipo encendido ([despliegue.md](despliegue.md)) |
 
@@ -65,7 +65,7 @@ Estados: **Cumple**, **Parcial** (existe, pero con una limitación que se explic
 ## Pendiente o decisión del equipo
 
 1. **API sin clave.** Hoy cualquiera con la URL puede usarla, incluido lanzar entrenamientos de hasta 100 000 pasos. Decidir si se activa `DRONE_RESCUE_API_TOKEN` y se entrega por el canal del curso ([despliegue.md](despliegue.md)).
-2. **Tag de entrega.** Crear un tag final sobre el commit definitivo, reiniciar la API para que `/version` muestre ese commit y, si `web/` cambió, actualizar producción (`vercel redeploy ... --target production`). Un `git push` a `main` solo crea Previews en Vercel; decidir si se cambia la rama de producción a `main` ([despliegue.md](despliegue.md)).
+2. **Reiniciar la API.** El tag `v1.0.0` ya existe. Reiniciar `serve_public.sh` para que `/version` muestre su commit. Si `web/` cambia en el futuro, actualizar producción (`vercel redeploy ... --target production`): un `git push` a `main` solo crea Previews en Vercel, y queda por decidir si se cambia la rama de producción a `main` ([despliegue.md](despliegue.md)).
 3. **La release no trae MLflow.** Para que la revisión local funcione sin cuenta de DagsHub, incluir una base de MLflow reducida en la release o hacer que la API cargue los modelos desde `manifests/` y `artifacts/models/` cuando no encuentre el run.
 4. **Test final reservado.** No existe; está declarado como límite ([informe.md](informe.md), sección 7).
 5. **Contribuciones.** Revisar la sección 8 del informe: se derivó del historial de Git y no refleja el trabajo no versionado.

@@ -2,7 +2,7 @@
 
 Un dron sale de BASE, recoge un suministro, lo entrega en la zona de entrega y vuelve a BASE. El ambiente (Gymnasium, física continua en un mundo de 100 × 100 × 60 m con columnas, viento y batería) vive en Python; un agente PPO (Stable-Baselines3) aprende a pilotarlo; una web en Three.js muestra el estado que le devuelve una API FastAPI. Cada experimento queda registrado en MLflow, versionado con Git y DVC, y publicado por un pipeline de Airflow que puede volver a la versión anterior. Proyecto final de MLOps, Universidad Externado de Colombia.
 
-**Estado:** hay un modelo oficial para N1, `ppo-v3c-n1` (10 de 10 en 199 pasos). Ningún modelo resuelve N2 ni N3. Los resultados, también los de los intentos que no mejoraron, están en el [informe](docs/informe.md).
+**Estado:** hay un modelo oficial para N1, `ppo-v3c-n1` (10 de 10 en 199 pasos). Ningún modelo resuelve N2 ni N3. Los resultados, también los de los intentos que no mejoraron, están en el [informe](docs/informe.md). La entrega final está marcada con el tag `v1.0.0`.
 
 ## Dónde está cada cosa
 
@@ -59,7 +59,7 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Para reproducir exactamente una entrega, usa su tag: `git checkout modelos-20261117`. El archivo `.env` es local y no va a Git; `.env.example` solo documenta nombres de variables y valores de desarrollo no sensibles.
+Para reproducir exactamente la entrega final, usa su tag: `git checkout v1.0.0` (los modelos están en la release `modelos-20261117`). El archivo `.env` es local y no va a Git; `.env.example` solo documenta nombres de variables y valores de desarrollo no sensibles.
 
 ## Ejecución
 

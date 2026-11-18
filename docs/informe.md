@@ -1,6 +1,6 @@
 # Informe breve: decisiones, resultados, límites y contribuciones
 
-Estado al 17 de noviembre de 2026. Complementa el [README](../README.md); cada afirmación remite al archivo que la respalda. Las cifras de evaluación salen de `evaluacion.json` de cada paquete y de los manifiestos, y se pueden repetir con [`scripts/reproduce_evaluation.py`](../scripts/reproduce_evaluation.py).
+Estado al 17 de noviembre de 2026; la entrega final está marcada con el tag `v1.0.0`. Complementa el [README](../README.md); cada afirmación remite al archivo que la respalda. Las cifras de evaluación salen de `evaluacion.json` de cada paquete y de los manifiestos, y se pueden repetir con [`scripts/reproduce_evaluation.py`](../scripts/reproduce_evaluation.py).
 
 ## 1. Misión y estado
 
